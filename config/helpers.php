@@ -16,9 +16,81 @@ function is_local_env(): bool
     return app_env() === 'local';
 }
 
+function is_local_host_name(string $host): bool
+{
+    $host = strtolower(trim($host));
+
+    return $host === '' || $host === 'localhost' || $host === '127.0.0.1' || $host === '::1';
+}
+
+function url_host_name(string $url): string
+{
+    $host = parse_url($url, PHP_URL_HOST);
+
+    return is_string($host) ? strtolower($host) : '';
+}
+
+function detected_app_base_url(): ?string
+{
+    $host = isset($_SERVER['HTTP_HOST']) ? trim((string) $_SERVER['HTTP_HOST']) : '';
+    if ($host === '') {
+        return null;
+    }
+
+    $scheme = 'http';
+    if (
+        (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        || (isset($_SERVER['SERVER_PORT']) && (string) $_SERVER['SERVER_PORT'] === '443')
+        || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string) $_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
+    ) {
+        $scheme = 'https';
+    }
+
+    $appRoot = realpath(dirname(__DIR__));
+    $documentRoot = isset($_SERVER['DOCUMENT_ROOT']) ? realpath((string) $_SERVER['DOCUMENT_ROOT']) : false;
+    $basePath = '';
+
+    if ($appRoot !== false && $documentRoot !== false) {
+        $normalizedAppRoot = str_replace('\\', '/', $appRoot);
+        $normalizedDocumentRoot = rtrim(str_replace('\\', '/', $documentRoot), '/');
+
+        if ($normalizedDocumentRoot !== '' && strpos($normalizedAppRoot, $normalizedDocumentRoot) === 0) {
+            $relativePath = trim(substr($normalizedAppRoot, strlen($normalizedDocumentRoot)), '/');
+            $basePath = $relativePath === '' ? '' : '/' . $relativePath;
+        }
+    }
+
+    return $scheme . '://' . $host . $basePath;
+}
+
+function resolved_app_url(): string
+{
+    $configuredUrl = trim((string) (env('APP_URL', '') ?? ''));
+    $detectedUrl = detected_app_base_url();
+
+    if ($detectedUrl !== null) {
+        $configuredHost = url_host_name($configuredUrl);
+        $detectedHost = url_host_name($detectedUrl);
+
+        if (
+            $configuredUrl === ''
+            || is_local_host_name($configuredHost)
+            || ($configuredHost !== '' && $detectedHost !== '' && $configuredHost !== $detectedHost)
+        ) {
+            return rtrim($detectedUrl, '/');
+        }
+    }
+
+    if ($configuredUrl !== '') {
+        return rtrim($configuredUrl, '/');
+    }
+
+    return 'http://localhost/core';
+}
+
 function base_url(string $path = ''): string
 {
-    $baseUrl = rtrim(env('APP_URL', 'http://localhost/core') ?? 'http://localhost/core', '/');
+    $baseUrl = resolved_app_url();
 
     if ($path === '') {
         return $baseUrl;

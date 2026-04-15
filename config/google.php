@@ -13,7 +13,24 @@ function google_client_secret(): string
 
 function google_redirect_uri(): string
 {
-    return env('GOOGLE_REDIRECT_URI', base_url('auth/google_callback.php')) ?? base_url('auth/google_callback.php');
+    $configuredUrl = trim((string) (env('GOOGLE_REDIRECT_URI', '') ?? ''));
+    $detectedUrl = base_url('auth/google_callback.php');
+
+    if ($configuredUrl === '') {
+        return $detectedUrl;
+    }
+
+    $configuredHost = url_host_name($configuredUrl);
+    $detectedHost = url_host_name($detectedUrl);
+
+    if (
+        is_local_host_name($configuredHost)
+        || ($configuredHost !== '' && $detectedHost !== '' && $configuredHost !== $detectedHost)
+    ) {
+        return $detectedUrl;
+    }
+
+    return $configuredUrl;
 }
 
 function google_configuration_is_ready(): bool
