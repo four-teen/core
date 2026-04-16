@@ -83,7 +83,7 @@ try {
     <script src="../assets/vendor/js/helpers.js"></script>
     <script src="../assets/js/config.js"></script>
   </head>
-  <body>
+  <body class="student-portal-page">
     <div class="layout-wrapper layout-content-navbar">
       <div class="layout-container">
         <div class="layout-page">
@@ -147,45 +147,23 @@ try {
               <?php if ($studentRecord !== null): ?>
                 <div class="row g-4 mb-4">
                   <div class="col-12">
-                    <div class="card hero-panel">
+                    <div class="card hero-panel student-hero-card">
                       <div class="card-body">
-                        <div class="row g-4 align-items-center">
-                          <div class="col-lg-8">
-                            <span class="badge bg-label-info mb-3">Student Details</span>
-                            <h3 class="mb-2"><?= h($studentRecord['full_name']) ?></h3>
-                            <p class="mb-0">
-                              Student No. <strong><?= h((string) $studentRecord['student_number']) ?></strong>
-                              | <?= h((string) $studentRecord['program_code']) ?>
-                            </p>
-                          </div>
-                          <div class="col-lg-4">
-                            <div class="hero-stat-card">
-                              <span class="hero-stat-label">Academic Term</span>
-                              <h4 class="mb-1"><?= h((string) $studentRecord['academic_year_label']) ?></h4>
-                              <p class="mb-1"><?= h(format_semester($studentRecord['semester'])) ?></p>
-                              <small><?= h(format_year_level($studentRecord['year_level'])) ?></small>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="row g-3 mt-2">
-                          <div class="col-md-4">
-                            <div class="module-note">
-                              <span class="badge bg-label-primary mb-2">Program</span>
-                              <div><?= h((string) $studentRecord['program_name']) ?></div>
-                            </div>
-                          </div>
-                          <div class="col-md-4">
-                            <div class="module-note">
-                              <span class="badge bg-label-success mb-2">Email</span>
-                              <div><?= h((string) $studentRecord['email_address']) ?></div>
-                            </div>
-                          </div>
-                          <div class="col-md-4">
-                            <div class="module-note">
-                              <span class="badge bg-label-info mb-2">Academic Term</span>
-                              <div><?= h((string) $studentRecord['academic_year_label']) ?> and <?= h(format_semester($studentRecord['semester'])) ?></div>
-                            </div>
+                        <div class="student-hero-content">
+                          <span class="badge student-hero-kicker mb-3">Student Portal</span>
+                          <h3 class="mb-2"><?= h($studentRecord['full_name']) ?></h3>
+                          <p class="student-hero-subtitle mb-3">
+                            Review your active subjects and continue your faculty evaluations from one streamlined dashboard.
+                          </p>
+                          <div class="student-hero-meta">
+                            <span class="student-hero-chip">
+                              <i class="bx bx-id-card"></i>
+                              Student No. <?= h((string) $studentRecord['student_number']) ?>
+                            </span>
+                            <span class="student-hero-chip">
+                              <i class="bx bx-medal"></i>
+                              <?= h(format_year_level($studentRecord['year_level'])) ?>
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -195,36 +173,36 @@ try {
 
                 <div class="row g-4 mb-4">
                   <div class="col-sm-6 col-xl-3">
-                    <div class="card metric-card h-100">
+                    <div class="card metric-card student-metric-card h-100">
                       <div class="card-body">
-                        <span class="metric-icon bg-label-primary"><i class="bx bx-book-open"></i></span>
+                        <span class="metric-icon student-metric-icon student-metric-icon-blue"><i class="bx bx-book-open"></i></span>
                         <div class="metric-value"><?= h(format_number($summary['enrolled_subjects'] ?? 0)) ?></div>
                         <div class="metric-label">Enrolled subjects</div>
                       </div>
                     </div>
                   </div>
                   <div class="col-sm-6 col-xl-3">
-                    <div class="card metric-card h-100">
+                    <div class="card metric-card student-metric-card h-100">
                       <div class="card-body">
-                        <span class="metric-icon bg-label-info"><i class="bx bx-user-pin"></i></span>
+                        <span class="metric-icon student-metric-icon student-metric-icon-teal"><i class="bx bx-user-pin"></i></span>
                         <div class="metric-value"><?= h(format_number($summary['faculty_count'] ?? 0)) ?></div>
                         <div class="metric-label">Faculty handling</div>
                       </div>
                     </div>
                   </div>
                   <div class="col-sm-6 col-xl-3">
-                    <div class="card metric-card h-100">
+                    <div class="card metric-card student-metric-card h-100">
                       <div class="card-body">
-                        <span class="metric-icon bg-label-success"><i class="bx bx-check-circle"></i></span>
+                        <span class="metric-icon student-metric-icon student-metric-icon-green"><i class="bx bx-check-circle"></i></span>
                         <div class="metric-value"><?= h(format_number($summary['submitted_evaluations'] ?? 0)) ?></div>
                         <div class="metric-label">Submitted evaluations</div>
                       </div>
                     </div>
                   </div>
                   <div class="col-sm-6 col-xl-3">
-                    <div class="card metric-card h-100">
+                    <div class="card metric-card student-metric-card h-100">
                       <div class="card-body">
-                        <span class="metric-icon bg-label-warning"><i class="bx bx-edit"></i></span>
+                        <span class="metric-icon student-metric-icon student-metric-icon-amber"><i class="bx bx-edit"></i></span>
                         <div class="metric-value"><?= h(format_number($summary['pending_evaluations'] ?? 0)) ?></div>
                         <div class="metric-label">Pending evaluations</div>
                       </div>
@@ -234,7 +212,7 @@ try {
 
                 <div class="row g-4 mb-4">
                   <div class="col-12">
-                    <div class="card">
+                    <div class="card student-section-card">
                       <div class="card-header">
                         <h5 class="mb-0">Your Subjects</h5>
                         <small class="text-muted">Mobile-friendly subject cards with evaluation actions.</small>
@@ -259,7 +237,7 @@ try {
                             }
                             ?>
                             <div class="col-12 col-lg-6">
-                              <div class="card subject-card h-100">
+                              <div class="card subject-card student-subject-card h-100">
                                 <div class="card-body">
                                   <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                                     <div>
@@ -332,7 +310,7 @@ try {
 
                 <div class="row g-4">
                   <div class="col-12">
-                    <div class="card">
+                    <div class="card student-section-card">
                       <div class="card-header">
                         <h5 class="mb-0">Evaluation Records</h5>
                         <small class="text-muted">Your saved drafts and submitted evaluations.</small>
@@ -346,7 +324,7 @@ try {
                           <?php endif; ?>
                           <?php foreach ($evaluations as $row): ?>
                             <div class="col-12 col-lg-6">
-                              <div class="card evaluation-history-card h-100">
+                              <div class="card evaluation-history-card student-record-card h-100">
                                 <div class="card-body">
                                   <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                                     <div>

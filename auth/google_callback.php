@@ -39,13 +39,36 @@ try {
         throw new RuntimeException('Your Google account must have a verified email address.');
     }
 
-    if (!administrator_email_is_allowed($email)) {
-        flash('error', 'Your Google account is not authorized for administrator access.');
-        redirect_to('auth/login.php');
+    $pdo = db();
+    $managedUser = user_management_find_by_email($pdo, $email);
+
+    if ($managedUser === null) {
+        $managedUser = user_management_bootstrap_from_legacy_allowlist($pdo, $profile);
+
+        if ($managedUser !== null) {
+            flash('notice', 'Your Google account was added to User Management using the legacy allowlist. You can manage access from the administrator dashboard.');
+        }
     }
 
-    login_administrator($profile);
-    redirect_to('administrator/index.php');
+    if ($managedUser !== null) {
+        if ((int) ($managedUser['is_active'] ?? 0) !== 1) {
+            flash('error', 'Your user management account is currently inactive.');
+            redirect_to('auth/login.php');
+        }
+
+        login_administrator($profile, $managedUser);
+        redirect_to('administrator/index.php');
+    }
+
+    $student = find_student_for_login($pdo, $email);
+
+    if ($student !== null) {
+        login_student($student);
+        redirect_to('student/index.php');
+    }
+
+    flash('error', 'This Google account is not authorized to access the system.');
+    redirect_to('auth/login.php');
 } catch (Throwable $exception) {
     $message = 'Unable to complete Google sign-in. Please check the OAuth configuration and try again.';
     if (is_local_env()) {

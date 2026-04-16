@@ -99,6 +99,24 @@ function base_url(string $path = ''): string
     return $baseUrl . '/' . ltrim($path, '/');
 }
 
+function asset_url(string $path): string
+{
+    $normalizedPath = ltrim($path, '/');
+    $assetUrl = base_url($normalizedPath);
+    $assetPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $normalizedPath);
+
+    if (!is_file($assetPath)) {
+        return $assetUrl;
+    }
+
+    $lastModified = @filemtime($assetPath);
+    if ($lastModified === false) {
+        return $assetUrl;
+    }
+
+    return $assetUrl . '?v=' . $lastModified;
+}
+
 function redirect_to(string $path): void
 {
     $target = preg_match('/^https?:\/\//i', $path) ? $path : base_url($path);
@@ -126,6 +144,29 @@ function flash(string $key, ?string $message = null): ?string
     unset($_SESSION['_flash'][$key]);
 
     return $value;
+}
+
+function csrf_token(): string
+{
+    $token = $_SESSION['_csrf_token'] ?? null;
+
+    if (!is_string($token) || $token === '') {
+        $token = bin2hex(random_bytes(32));
+        $_SESSION['_csrf_token'] = $token;
+    }
+
+    return $token;
+}
+
+function verify_csrf_token(?string $token): bool
+{
+    $sessionToken = $_SESSION['_csrf_token'] ?? null;
+
+    return is_string($token)
+        && $token !== ''
+        && is_string($sessionToken)
+        && $sessionToken !== ''
+        && hash_equals($sessionToken, $token);
 }
 
 function csv_values(?string $value): array

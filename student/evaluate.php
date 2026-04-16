@@ -219,8 +219,8 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
                             <div class="evaluation-question-list">
                               <?php $position = 1; ?>
                               <?php foreach ($category['questions'] as $questionText): ?>
-                                <?php $questionKey = $category['key'] . '_' . $position; ?>
-                                <?php $selectedValue = isset($answers[$questionKey]) ? (int) $answers[$questionKey] : 0; ?>
+                                <?php $questionKey = evaluation_question_key($category, $position); ?>
+                                <?php $selectedValue = evaluation_answer_value($answers, $category, $position); ?>
                                 <div class="evaluation-question-card">
                                   <div class="evaluation-question-text">
                                     <strong><?= h((string) $position) ?>.</strong>

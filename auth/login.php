@@ -7,9 +7,20 @@ if (is_admin_authenticated()) {
     redirect_to('administrator/index.php');
 }
 
+if (is_student_authenticated()) {
+    redirect_to('student/index.php');
+}
+
 $errorMessage = flash('error');
 $noticeMessage = flash('notice');
+$googleReady = google_configuration_is_ready();
 $allowedDomain = primary_administrator_domain();
+$googleAccessMessage = $allowedDomain !== null
+    ? 'Use one Google sign-in button for authorized users and enrolled students. Administrator access is limited to approved ' . $allowedDomain . ' accounts, while student access is matched from enrolled records.'
+    : 'Use one Google sign-in button for authorized users and enrolled students. The system automatically opens the correct portal based on your account.';
+$googleButtonCaption = $allowedDomain !== null
+    ? 'Administrator and student access use this same Google sign-in'
+    : 'The system routes administrators, staff, and students automatically';
 ?>
 <!DOCTYPE html>
 <html
@@ -27,53 +38,57 @@ $allowedDomain = primary_administrator_domain();
       content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
     />
 
-    <title><?= h(app_name()) ?> | Administrator Login</title>
+    <title><?= h(app_name()) ?> | Sign In</title>
 
-    <meta name="description" content="Administrator sign in for CORE Faculty Evaluation." />
+    <meta name="description" content="Sign in for CORE Faculty Evaluation." />
 
-    <link rel="icon" type="image/x-icon" href="../assets/img/favicon/favicon.ico" />
+    <link rel="icon" type="image/x-icon" href="<?= h(asset_url('assets/img/favicon/favicon.ico')) ?>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="../assets/vendor/fonts/boxicons.css" />
-    <link rel="stylesheet" href="../assets/vendor/css/core.css" class="template-customizer-core-css" />
-    <link rel="stylesheet" href="../assets/vendor/css/theme-default.css" class="template-customizer-theme-css" />
-    <link rel="stylesheet" href="../assets/css/demo.css" />
-    <link rel="stylesheet" href="../assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css" />
-    <link rel="stylesheet" href="../assets/vendor/css/pages/page-auth.css" />
-    <link rel="stylesheet" href="../assets/css/app.css" />
-    <script src="../assets/vendor/js/helpers.js"></script>
-    <script src="../assets/js/config.js"></script>
+    <link rel="stylesheet" href="<?= h(asset_url('assets/vendor/fonts/boxicons.css')) ?>" />
+    <link rel="stylesheet" href="<?= h(asset_url('assets/vendor/css/core.css')) ?>" class="template-customizer-core-css" />
+    <link rel="stylesheet" href="<?= h(asset_url('assets/vendor/css/theme-default.css')) ?>" class="template-customizer-theme-css" />
+    <link rel="stylesheet" href="<?= h(asset_url('assets/css/demo.css')) ?>" />
+    <link rel="stylesheet" href="<?= h(asset_url('assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css')) ?>" />
+    <link rel="stylesheet" href="<?= h(asset_url('assets/vendor/css/pages/page-auth.css')) ?>" />
+    <link rel="stylesheet" href="<?= h(asset_url('assets/css/app.css')) ?>" />
+    <script src="<?= h(asset_url('assets/vendor/js/helpers.js')) ?>"></script>
+    <script src="<?= h(asset_url('assets/js/config.js')) ?>"></script>
   </head>
 
-  <body>
-    <div class="container-xxl">
-      <div class="authentication-wrapper authentication-basic container-p-y">
-        <div class="authentication-inner">
-          <div class="card auth-card-clean">
-            <div class="card-body">
-              <div class="app-brand justify-content-center mb-4">
-                <a href="<?= h(base_url()) ?>" class="app-brand-link gap-2">
-                  <span class="app-brand-logo demo">
-                    <span class="brand-icon-shell">
-                      <i class="bx bx-bar-chart-square"></i>
-                    </span>
-                  </span>
-                  <span class="app-brand-text text-body fw-bolder"><?= h(app_name()) ?></span>
-                </a>
-              </div>
+  <body class="auth-login-page">
+    <div class="auth-login-shell">
+      <div class="auth-login-card">
+        <div class="auth-login-emblem" aria-hidden="true">
+          <div class="auth-login-emblem-ring">
+            <div class="auth-login-emblem-core">
+              <span class="auth-login-emblem-icon">
+                <i class="bx bx-bar-chart-square"></i>
+              </span>
+              <span class="auth-login-emblem-text">CORE</span>
+            </div>
+          </div>
+        </div>
 
-              <div class="text-center mb-4">
-                <span class="badge bg-label-primary mb-3">Administrator Access</span>
-                <h4 class="mb-2">Sign in with Google</h4>
-                <p class="mb-0">
-                  Use your administrator Google account to access the faculty evaluation dashboard.
-                </p>
-              </div>
+        <div class="auth-login-panel">
+          <div class="auth-login-heading">
+            <h2><?= h(app_name()) ?></h2>
+            <p class="auth-login-description">
+              Sign in once with Google and the system will open the correct portal for your authorized account.
+            </p>
+            <p class="auth-login-campus">Sultan Kudarat State University</p>
+          </div>
 
+          <div class="auth-login-message auth-login-message-info">
+            <p><?= h($googleAccessMessage) ?></p>
+          </div>
+
+          <?php if ($noticeMessage !== null || $errorMessage !== null): ?>
+            <div class="auth-login-flashes">
               <?php if ($noticeMessage !== null): ?>
                 <div class="alert alert-success" role="alert"><?= h($noticeMessage) ?></div>
               <?php endif; ?>
@@ -81,53 +96,48 @@ $allowedDomain = primary_administrator_domain();
               <?php if ($errorMessage !== null): ?>
                 <div class="alert alert-danger" role="alert"><?= h($errorMessage) ?></div>
               <?php endif; ?>
-
-              <div class="auth-callout mb-4">
-                <div class="d-flex">
-                  <div class="flex-shrink-0">
-                    <i class="bx bx-shield-quarter text-primary fs-3"></i>
-                  </div>
-                  <div class="flex-grow-1 ms-3">
-                    <h6 class="mb-1">Authorized administrators only</h6>
-                    <p class="mb-0">
-                      <?php if ($allowedDomain !== null): ?>
-                        Access is currently limited to the <strong><?= h($allowedDomain) ?></strong> Google domain.
-                      <?php else: ?>
-                        Set the allowed administrator emails or domains in <code>.env</code> before login.
-                      <?php endif; ?>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <a href="<?= h(base_url('auth/google_login.php')) ?>" class="btn btn-google-login w-100">
-                <i class="bx bxl-google fs-4"></i>
-                <span>Continue with Google</span>
-              </a>
-
-              <div class="text-center mt-4">
-                <small class="text-muted">
-                  Redirect URI:
-                  <code><?= h(google_redirect_uri()) ?></code>
-                </small>
-              </div>
-
-              <div class="text-center mt-3">
-                <a href="<?= h(base_url('student/login.php')) ?>" class="text-muted">
-                  Student portal sign in
-                </a>
-              </div>
             </div>
-          </div>
+          <?php endif; ?>
+
+          <div class="auth-login-section-label">Authorized Google Sign-In</div>
+
+          <?php if ($googleReady): ?>
+            <a href="<?= h(base_url('auth/google_login.php')) ?>" class="btn auth-google-button">
+              <span class="auth-google-button-avatar">
+                <i class="bx bx-user-circle"></i>
+              </span>
+              <span class="auth-google-button-copy">
+                <strong>Continue with Google</strong>
+                <span><?= h($googleButtonCaption) ?></span>
+              </span>
+              <span class="auth-google-button-tail">
+                <i class="bx bx-chevron-down"></i>
+                <img src="<?= h(asset_url('assets/img/icons/brands/google.png')) ?>" alt="Google" />
+              </span>
+            </a>
+          <?php else: ?>
+            <button type="button" class="btn auth-google-button" disabled>
+              <span class="auth-google-button-avatar">
+                <i class="bx bx-user-circle"></i>
+              </span>
+              <span class="auth-google-button-copy">
+                <strong>Google sign-in unavailable</strong>
+                <span>OAuth configuration is required before registered accounts can continue.</span>
+              </span>
+              <span class="auth-google-button-tail">
+                <img src="<?= h(asset_url('assets/img/icons/brands/google.png')) ?>" alt="Google" />
+              </span>
+            </button>
+          <?php endif; ?>
         </div>
       </div>
     </div>
 
-    <script src="../assets/vendor/libs/jquery/jquery.js"></script>
-    <script src="../assets/vendor/libs/popper/popper.js"></script>
-    <script src="../assets/vendor/js/bootstrap.js"></script>
-    <script src="../assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.js"></script>
-    <script src="../assets/vendor/js/menu.js"></script>
-    <script src="../assets/js/main.js"></script>
+    <script src="<?= h(asset_url('assets/vendor/libs/jquery/jquery.js')) ?>"></script>
+    <script src="<?= h(asset_url('assets/vendor/libs/popper/popper.js')) ?>"></script>
+    <script src="<?= h(asset_url('assets/vendor/js/bootstrap.js')) ?>"></script>
+    <script src="<?= h(asset_url('assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.js')) ?>"></script>
+    <script src="<?= h(asset_url('assets/vendor/js/menu.js')) ?>"></script>
+    <script src="<?= h(asset_url('assets/js/main.js')) ?>"></script>
   </body>
 </html>

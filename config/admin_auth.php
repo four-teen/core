@@ -15,20 +15,28 @@ function is_admin_authenticated(): bool
 function require_admin_authentication(): void
 {
     if (!is_admin_authenticated()) {
-        flash('error', 'Please sign in with your administrator Google account.');
+        flash('error', 'Please sign in with your authorized Google account.');
         redirect_to('auth/login.php');
     }
 }
 
-function login_administrator(array $administrator): void
+function login_administrator(array $profile, ?array $managedUser = null): void
 {
     session_regenerate_id(true);
+    unset($_SESSION['student']);
+
+    $displayName = trim((string) ($managedUser['full_name'] ?? ''));
+    if ($displayName === '') {
+        $displayName = (string) ($profile['name'] ?? 'Administrator');
+    }
 
     $_SESSION['administrator'] = [
-        'google_id' => (string) ($administrator['sub'] ?? ''),
-        'name' => (string) ($administrator['name'] ?? 'Administrator'),
-        'email' => (string) ($administrator['email'] ?? ''),
-        'picture' => (string) ($administrator['picture'] ?? ''),
+        'user_management_id' => (int) ($managedUser['user_management_id'] ?? 0),
+        'google_id' => (string) ($profile['sub'] ?? ''),
+        'name' => $displayName,
+        'email' => user_management_normalize_email((string) ($profile['email'] ?? $managedUser['email_address'] ?? '')),
+        'picture' => (string) ($profile['picture'] ?? ''),
+        'role' => user_management_normalize_role((string) ($managedUser['account_role'] ?? 'administrator')),
         'logged_in_at' => date('Y-m-d H:i:s'),
     ];
 }

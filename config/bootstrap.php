@@ -38,6 +38,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/database.php';
+require_once __DIR__ . '/user_management.php';
 require_once __DIR__ . '/admin_auth.php';
 require_once __DIR__ . '/student_auth.php';
 require_once __DIR__ . '/google.php';

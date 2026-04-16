@@ -7,13 +7,12 @@ if (is_admin_authenticated()) {
     redirect_to('administrator/index.php');
 }
 
-if (!google_configuration_is_ready()) {
-    flash('error', 'Google login is not configured yet. Please review the .env file.');
-    redirect_to('auth/login.php');
+if (is_student_authenticated()) {
+    redirect_to('student/index.php');
 }
 
-if (allowed_administrator_emails() === [] && allowed_administrator_domains() === []) {
-    flash('error', 'No administrator allowlist is configured in the .env file.');
+if (!google_configuration_is_ready()) {
+    flash('error', 'Google login is not configured yet. Please review the .env file.');
     redirect_to('auth/login.php');
 }
 

@@ -105,7 +105,12 @@ if (!isset($activeAdminPage)) {
               <div class="d-flex align-items-center gap-3">
                 <div class="text-end">
                   <div class="fw-semibold"><?= h($administrator['name'] ?? 'Administrator') ?></div>
-                  <small class="text-muted"><?= h($administrator['email'] ?? '') ?></small>
+                  <small class="text-muted">
+                    <?= h(user_management_role_label((string) ($administrator['role'] ?? 'administrator'))) ?>
+                    <?php if (!empty($administrator['email'])): ?>
+                      | <?= h($administrator['email']) ?>
+                    <?php endif; ?>
+                  </small>
                 </div>
                 <?php if (!empty($administrator['picture'])): ?>
                   <img

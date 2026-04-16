@@ -32,6 +32,7 @@ function evaluation_question_bank(): array
     return [
         [
             'key' => 'commitment',
+            'code' => 'cmt',
             'title' => 'COMMITMENT',
             'questions' => [
                 'Demonstrates sensitivity to students’ ability to attend and absorb content information.',
@@ -43,6 +44,7 @@ function evaluation_question_bank(): array
         ],
         [
             'key' => 'knowledge_of_subject_matter',
+            'code' => 'ksm',
             'title' => 'KNOWLEDGE OF SUBJECT MATTER',
             'questions' => [
                 'Discusses the subject matter without completely relying on the prescribed reading.',
@@ -54,6 +56,7 @@ function evaluation_question_bank(): array
         ],
         [
             'key' => 'teaching_for_independent_learning',
+            'code' => 'til',
             'title' => 'TEACHING FOR INDEPENDENT LEARNING',
             'questions' => [
                 'Employs teaching strategies that allow students to practice using concepts they need to understand (interactive discussion).',
@@ -65,6 +68,7 @@ function evaluation_question_bank(): array
         ],
         [
             'key' => 'management_of_learning',
+            'code' => 'mol',
             'title' => 'MANAGEMENT OF LEARNING',
             'questions' => [
                 'Creates opportunities for intensive and/or extensive contribution of students in the class activities (e.g. breaks class into dyads, triads or buzz/task groups).',
@@ -75,6 +79,41 @@ function evaluation_question_bank(): array
             ],
         ],
     ];
+}
+
+function evaluation_question_key(array $category, int $position): string
+{
+    $code = strtolower(trim((string) ($category['code'] ?? $category['key'] ?? 'q')));
+    $code = preg_replace('/[^a-z0-9_]+/', '', $code);
+    $code = is_string($code) && $code !== '' ? $code : 'q';
+
+    return $code . '_' . $position;
+}
+
+function evaluation_question_key_aliases(array $category, int $position): array
+{
+    $keys = [evaluation_question_key($category, $position)];
+    $legacyBase = trim((string) ($category['key'] ?? ''));
+
+    if ($legacyBase !== '') {
+        $legacyKey = $legacyBase . '_' . $position;
+        if (!in_array($legacyKey, $keys, true)) {
+            $keys[] = $legacyKey;
+        }
+    }
+
+    return $keys;
+}
+
+function evaluation_answer_value(array $answers, array $category, int $position): int
+{
+    foreach (evaluation_question_key_aliases($category, $position) as $questionKey) {
+        if (isset($answers[$questionKey])) {
+            return (int) $answers[$questionKey];
+        }
+    }
+
+    return 0;
 }
 
 function evaluation_total_question_count(): int
@@ -323,7 +362,7 @@ function normalize_evaluation_answers(array $submittedAnswers): array
     foreach (evaluation_question_bank() as $category) {
         $position = 1;
         foreach ($category['questions'] as $questionText) {
-            $questionKey = $category['key'] . '_' . $position;
+            $questionKey = evaluation_question_key($category, $position);
             $rating = isset($submittedAnswers[$questionKey]) ? (int) $submittedAnswers[$questionKey] : 0;
             if (!in_array($rating, $validScores, true)) {
                 throw new RuntimeException('Please provide a rating for every evaluation item.');

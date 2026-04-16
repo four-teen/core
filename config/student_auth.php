@@ -23,6 +23,7 @@ function require_student_authentication(): void
 function login_student(array $student): void
 {
     session_regenerate_id(true);
+    unset($_SESSION['administrator'], $_SESSION['google_oauth_state']);
 
     $_SESSION['student'] = [
         'student_id' => (int) ($student['student_id'] ?? 0),

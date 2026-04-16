@@ -57,11 +57,6 @@ function google_authorization_url(): string
         'state' => $state,
     ];
 
-    $domain = primary_administrator_domain();
-    if ($domain !== null) {
-        $parameters['hd'] = $domain;
-    }
-
     return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query($parameters);
 }
 
