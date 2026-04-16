@@ -500,6 +500,37 @@
   padding: 1.5rem;
 }
 
+.dashboard-chart-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.dashboard-highest-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.7rem;
+  background: rgba(242, 153, 0, 0.1);
+  color: #566a7f;
+  font-size: 0.78rem;
+}
+
+.dashboard-highest-pill span {
+  color: #f29900;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-highest-pill strong {
+  color: #2f4054;
+  font-weight: 700;
+}
+
 .evaluation-trend-chart {
   min-height: 24rem;
 }

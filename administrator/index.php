@@ -12,9 +12,12 @@ $activeAdminPage = 'dashboard';
 
 $overview = [];
 $currentTerm = null;
-$evaluationTrend = [
+$evaluationCategoryAverages = [
     'labels' => [],
     'series' => [],
+    'colors' => [],
+    'details' => [],
+    'highest' => null,
     'hasData' => false,
 ];
 $databaseError = null;
@@ -25,19 +28,19 @@ try {
     $pdo = db();
     $overview = dashboard_overview($pdo);
     $currentTerm = dashboard_current_term($pdo);
-    $evaluationTrend = dashboard_evaluation_rating_trend($pdo, 12);
+    $evaluationCategoryAverages = dashboard_evaluation_category_averages($pdo);
 } catch (Throwable $exception) {
     $databaseError = is_local_env()
         ? 'Unable to load dashboard data. ' . $exception->getMessage()
         : 'Unable to load dashboard data. Please confirm the database connection settings in .env.';
 }
 
-$evaluationTrendJson = json_encode(
-    $evaluationTrend,
+$evaluationCategoryAveragesJson = json_encode(
+    $evaluationCategoryAverages,
     JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT
 );
-if ($evaluationTrendJson === false) {
-    $evaluationTrendJson = '{"labels":[],"series":[],"hasData":false}';
+if ($evaluationCategoryAveragesJson === false) {
+    $evaluationCategoryAveragesJson = '{"labels":[],"series":[],"colors":[],"details":[],"highest":null,"hasData":false}';
 }
 
 require __DIR__ . '/_start.php';
@@ -135,16 +138,27 @@ require __DIR__ . '/_start.php';
       <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
           <div>
-            <span class="badge bg-label-primary mb-2">Evaluation Rating Trends</span>
-            <h5 class="mb-1">Category averages over the last 12 months</h5>
-            <p class="text-muted mb-0">Submitted evaluation ratings grouped by month and criteria.</p>
+            <span class="badge bg-label-primary mb-2">Evaluation Category Scores</span>
+            <h5 class="mb-1">Average rating by evaluation category</h5>
+            <p class="text-muted mb-0">Submitted evaluation ratings grouped by criteria.</p>
           </div>
-          <a href="<?= h(base_url('administrator/evaluations.php')) ?>" class="btn btn-outline-primary btn-sm">
-            <i class="bx bx-time-five me-1"></i>
-            View Activity
-          </a>
+          <div class="dashboard-chart-actions">
+            <?php if (($evaluationCategoryAverages['highest'] ?? null) !== null): ?>
+              <div class="dashboard-highest-pill">
+                <span>Highest</span>
+                <strong>
+                  <?= h((string) $evaluationCategoryAverages['highest']['name']) ?>
+                  <?= h(format_average($evaluationCategoryAverages['highest']['average'])) ?>
+                </strong>
+              </div>
+            <?php endif; ?>
+            <a href="<?= h(base_url('administrator/evaluations.php')) ?>" class="btn btn-outline-primary btn-sm">
+              <i class="bx bx-time-five me-1"></i>
+              View Activity
+            </a>
+          </div>
         </div>
-        <div id="evaluationRatingTrendChart" class="evaluation-trend-chart"></div>
+        <div id="evaluationCategoryAverageChart" class="evaluation-trend-chart"></div>
       </div>
     </div>
   </div>
@@ -152,18 +166,18 @@ require __DIR__ . '/_start.php';
 <script src="<?= h(asset_url('assets/vendor/libs/apex-charts/apexcharts.js')) ?>"></script>
 <script>
   window.addEventListener('DOMContentLoaded', function () {
-    var chartElement = document.querySelector('#evaluationRatingTrendChart');
+    var chartElement = document.querySelector('#evaluationCategoryAverageChart');
 
     if (!chartElement || typeof ApexCharts === 'undefined') {
       return;
     }
 
-    var trendData = <?= $evaluationTrendJson ?>;
-    var hasTrendData = Boolean(trendData.hasData);
+    var categoryData = <?= $evaluationCategoryAveragesJson ?>;
+    var hasCategoryData = Boolean(categoryData.hasData);
 
     var chart = new ApexCharts(chartElement, {
       chart: {
-        type: 'line',
+        type: 'bar',
         height: 380,
         fontFamily: 'Public Sans, sans-serif',
         toolbar: { show: false },
@@ -174,17 +188,33 @@ require __DIR__ . '/_start.php';
           speed: 700
         }
       },
-      series: hasTrendData ? trendData.series : [],
-      colors: ['#696cff', '#03c3ec', '#f29900', '#34a853', '#ff6b35'],
-      stroke: {
-        curve: 'smooth',
-        width: 3,
-        lineCap: 'round'
+      series: hasCategoryData ? categoryData.series : [],
+      colors: categoryData.colors || ['#696cff', '#03c3ec', '#f29900', '#34a853'],
+      plotOptions: {
+        bar: {
+          distributed: true,
+          borderRadius: 7,
+          columnWidth: '45%',
+          dataLabels: {
+            position: 'top'
+          }
+        }
       },
-      markers: {
-        size: 4,
-        strokeWidth: 3,
-        hover: { size: 7 }
+      dataLabels: {
+        enabled: true,
+        offsetY: -20,
+        formatter: function (value) {
+          if (value === null || typeof value === 'undefined') {
+            return '';
+          }
+
+          return Number(value).toFixed(2);
+        },
+        style: {
+          colors: ['#566a7f'],
+          fontSize: '12px',
+          fontWeight: 700
+        }
       },
       grid: {
         borderColor: '#eef1f6',
@@ -197,27 +227,26 @@ require __DIR__ . '/_start.php';
         }
       },
       legend: {
-        position: 'top',
-        horizontalAlign: 'left',
-        fontSize: '13px',
-        markers: {
-          width: 10,
-          height: 10,
-          radius: 10
-        }
+        show: false
       },
       xaxis: {
-        categories: trendData.labels || [],
+        categories: categoryData.labels || [],
         labels: {
-          style: { colors: '#8592a3', fontSize: '12px' }
+          rotate: 0,
+          trim: false,
+          style: {
+            colors: '#566a7f',
+            fontSize: '12px',
+            fontWeight: 600
+          }
         },
         axisBorder: { show: false },
         axisTicks: { show: false }
       },
       yaxis: {
-        min: 1,
+        min: 0,
         max: 5,
-        tickAmount: 4,
+        tickAmount: 5,
         labels: {
           formatter: function (value) {
             return Number(value).toFixed(1);
@@ -226,8 +255,8 @@ require __DIR__ . '/_start.php';
         }
       },
       tooltip: {
-        shared: true,
-        intersect: false,
+        shared: false,
+        intersect: true,
         y: {
           formatter: function (value) {
             if (value === null || typeof value === 'undefined') {
@@ -239,7 +268,7 @@ require __DIR__ . '/_start.php';
         }
       },
       noData: {
-        text: 'No submitted evaluation ratings yet',
+        text: 'No submitted category ratings yet',
         align: 'center',
         verticalAlign: 'middle',
         style: {

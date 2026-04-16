@@ -323,6 +323,136 @@ function dashboard_evaluation_rating_trend(PDO $pdo, int $months = 12): array
     ];
 }
 
+function dashboard_evaluation_category_averages(PDO $pdo): array
+{
+    ensure_evaluation_subject_scope($pdo);
+
+    $categories = [];
+    foreach (evaluation_question_bank() as $category) {
+        $categoryKey = (string) ($category['key'] ?? '');
+        if ($categoryKey === '') {
+            continue;
+        }
+
+        $categoryTitle = ucwords(strtolower((string) ($category['title'] ?? $categoryKey)));
+        $categories[$categoryKey] = [
+            'name' => $categoryTitle,
+            'label' => dashboard_category_axis_label($categoryTitle),
+            'average' => null,
+            'responses' => 0,
+            'evaluations' => 0,
+        ];
+    }
+
+    $sql = "SELECT
+                ans.category_key,
+                MAX(ans.category_title) AS category_title,
+                ROUND(AVG(ans.rating), 2) AS average_rating,
+                COUNT(*) AS response_count,
+                COUNT(DISTINCT ev.evaluation_id) AS evaluation_count
+            FROM tbl_student_faculty_evaluation_answers ans
+            INNER JOIN tbl_student_faculty_evaluations ev
+                ON ev.evaluation_id = ans.evaluation_id
+            WHERE ev.student_enrollment_id IS NOT NULL
+              AND ev.submission_status = 'submitted'
+              AND ans.rating BETWEEN 1 AND 5
+            GROUP BY ans.category_key
+            ORDER BY ans.category_key ASC";
+
+    $statement = $pdo->query($sql);
+
+    $hasData = false;
+    foreach ($statement->fetchAll() as $row) {
+        $categoryKey = (string) ($row['category_key'] ?? '');
+        if (!isset($categories[$categoryKey])) {
+            $categoryTitle = ucwords(strtolower((string) ($row['category_title'] ?? $categoryKey)));
+            $categories[$categoryKey] = [
+                'name' => $categoryTitle,
+                'label' => dashboard_category_axis_label($categoryTitle),
+                'average' => null,
+                'responses' => 0,
+                'evaluations' => 0,
+            ];
+        }
+
+        $categories[$categoryKey]['average'] = (float) ($row['average_rating'] ?? 0);
+        $categories[$categoryKey]['responses'] = (int) ($row['response_count'] ?? 0);
+        $categories[$categoryKey]['evaluations'] = (int) ($row['evaluation_count'] ?? 0);
+        $hasData = true;
+    }
+
+    $labels = [];
+    $data = [];
+    $colors = [];
+    $details = [];
+    $highest = null;
+    $baseColors = ['#696cff', '#03c3ec', '#f29900', '#34a853', '#ff6b35'];
+    $index = 0;
+
+    foreach ($categories as $category) {
+        $labels[] = $category['label'];
+        $value = $category['average'];
+        $data[] = $value;
+        $details[] = [
+            'name' => $category['name'],
+            'average' => $value,
+            'responses' => $category['responses'],
+            'evaluations' => $category['evaluations'],
+        ];
+
+        if ($value !== null && ($highest === null || $value > (float) $highest['average'])) {
+            $highest = [
+                'name' => $category['name'],
+                'average' => $value,
+            ];
+        }
+
+        $colors[] = $baseColors[$index % count($baseColors)];
+        $index++;
+    }
+
+    if ($highest !== null) {
+        foreach ($details as $detailIndex => $detail) {
+            if ($detail['name'] === $highest['name']) {
+                $colors[$detailIndex] = '#f29900';
+            }
+        }
+    }
+
+    return [
+        'labels' => $labels,
+        'series' => [
+            [
+                'name' => 'Average Rating',
+                'data' => $data,
+            ],
+        ],
+        'colors' => $colors,
+        'details' => $details,
+        'highest' => $highest,
+        'hasData' => $hasData,
+    ];
+}
+
+function dashboard_category_axis_label(string $categoryTitle): array
+{
+    $normalized = strtolower($categoryTitle);
+
+    if ($normalized === 'knowledge of subject matter') {
+        return ['Knowledge of', 'Subject Matter'];
+    }
+
+    if ($normalized === 'teaching for independent learning') {
+        return ['Teaching for', 'Independent Learning'];
+    }
+
+    if ($normalized === 'management of learning') {
+        return ['Management of', 'Learning'];
+    }
+
+    return [$categoryTitle];
+}
+
 function dashboard_student_preview_list(PDO $pdo, string $search = ''): array
 {
     $sql = "SELECT
