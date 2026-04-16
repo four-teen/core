@@ -58,7 +58,7 @@ if (!isset($activeAdminPage)) {
                   <i class="bx bx-bar-chart-square"></i>
                 </span>
               </span>
-              <span class="app-brand-text demo menu-text fw-bolder ms-2"><?= h(app_name()) ?></span>
+              <span class="app-brand-text demo menu-text fw-bolder ms-2 admin-brand-text">CORE</span>
             </a>
 
             <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto d-block d-xl-none">
@@ -85,6 +85,18 @@ if (!isset($activeAdminPage)) {
               <a href="<?= h(base_url('administrator/students.php')) ?>" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-group"></i>
                 <div>Students</div>
+              </a>
+            </li>
+            <li class="menu-item <?= $activeAdminPage === 'users' ? 'active' : '' ?>">
+              <a href="<?= h(base_url('administrator/users.php')) ?>" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-shield-quarter"></i>
+                <div>User Management</div>
+              </a>
+            </li>
+            <li class="menu-item <?= $activeAdminPage === 'evaluations' ? 'active' : '' ?>">
+              <a href="<?= h(base_url('administrator/evaluations.php')) ?>" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-time-five"></i>
+                <div>Recent Evaluation Activity</div>
               </a>
             </li>
           </ul>

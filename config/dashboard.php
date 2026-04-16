@@ -115,9 +115,10 @@ function dashboard_subject_sections(PDO $pdo): array
     return $rows;
 }
 
-function dashboard_recent_evaluations(PDO $pdo): array
+function dashboard_recent_evaluations(PDO $pdo, int $limit = 8): array
 {
     ensure_evaluation_subject_scope($pdo);
+    $limit = max(1, min(100, $limit));
 
     $statement = $pdo->query(
         "SELECT
@@ -134,18 +135,192 @@ function dashboard_recent_evaluations(PDO $pdo): array
                 CONCAT('Faculty #', ev.faculty_id)
             ) AS faculty_name,
             ev.student_number,
+            TRIM(CONCAT(
+                COALESCE(sm.last_name, ''),
+                CASE WHEN sm.last_name IS NULL OR sm.last_name = '' THEN '' ELSE ', ' END,
+                COALESCE(sm.first_name, ''),
+                CASE WHEN sm.middle_name IS NULL OR sm.middle_name = '' THEN '' ELSE CONCAT(' ', sm.middle_name) END,
+                CASE WHEN sm.suffix_name IS NULL OR sm.suffix_name = '' THEN '' ELSE CONCAT(' ', sm.suffix_name) END
+            )) AS student_full_name,
             ev.average_rating,
             ev.submission_status,
             ev.completed_at,
             ev.updated_at
         FROM tbl_student_faculty_evaluations ev
         LEFT JOIN tbl_faculty f ON f.faculty_id = ev.faculty_id
+        LEFT JOIN tbl_student_management sm ON sm.student_id = ev.student_id
         WHERE ev.student_enrollment_id IS NOT NULL
         ORDER BY ev.updated_at DESC, ev.evaluation_id DESC
-        LIMIT 8"
+        LIMIT " . $limit
     );
 
     return $statement->fetchAll();
+}
+
+function dashboard_evaluation_faculty_summary(PDO $pdo): array
+{
+    ensure_evaluation_subject_scope($pdo);
+
+    $statement = $pdo->query(
+        "SELECT
+            ev.faculty_id,
+            COALESCE(
+                NULLIF(ev.faculty_name, ''),
+                TRIM(CONCAT(
+                    COALESCE(f.last_name, ''),
+                    CASE WHEN f.last_name IS NULL OR f.last_name = '' THEN '' ELSE ', ' END,
+                    COALESCE(f.first_name, ''),
+                    CASE WHEN f.ext_name IS NULL OR f.ext_name = '' THEN '' ELSE CONCAT(' ', f.ext_name) END
+                )),
+                CONCAT('Faculty #', ev.faculty_id)
+            ) AS faculty_name,
+            COUNT(*) AS evaluation_count,
+            SUM(CASE WHEN ev.submission_status = 'submitted' THEN 1 ELSE 0 END) AS submitted_count,
+            SUM(CASE WHEN ev.submission_status = 'draft' THEN 1 ELSE 0 END) AS draft_count,
+            COUNT(DISTINCT ev.student_id) AS student_count,
+            COUNT(DISTINCT ev.subject_id) AS subject_count,
+            ROUND(AVG(NULLIF(ev.average_rating, 0)), 2) AS average_rating,
+            MAX(ev.updated_at) AS last_updated
+        FROM tbl_student_faculty_evaluations ev
+        LEFT JOIN tbl_faculty f ON f.faculty_id = ev.faculty_id
+        WHERE ev.student_enrollment_id IS NOT NULL
+          AND ev.faculty_id <> 0
+        GROUP BY ev.faculty_id, faculty_name
+        ORDER BY submitted_count DESC, evaluation_count DESC, faculty_name ASC"
+    );
+
+    return $statement->fetchAll();
+}
+
+function dashboard_faculty_evaluation_details(PDO $pdo, int $facultyId): array
+{
+    ensure_evaluation_subject_scope($pdo);
+
+    $statement = $pdo->prepare(
+        "SELECT
+            ev.evaluation_id,
+            ev.faculty_id,
+            COALESCE(
+                NULLIF(ev.faculty_name, ''),
+                TRIM(CONCAT(
+                    COALESCE(f.last_name, ''),
+                    CASE WHEN f.last_name IS NULL OR f.last_name = '' THEN '' ELSE ', ' END,
+                    COALESCE(f.first_name, ''),
+                    CASE WHEN f.ext_name IS NULL OR f.ext_name = '' THEN '' ELSE CONCAT(' ', f.ext_name) END
+                )),
+                CONCAT('Faculty #', ev.faculty_id)
+            ) AS faculty_name,
+            ev.student_number,
+            TRIM(CONCAT(
+                COALESCE(sm.last_name, ''),
+                CASE WHEN sm.last_name IS NULL OR sm.last_name = '' THEN '' ELSE ', ' END,
+                COALESCE(sm.first_name, ''),
+                CASE WHEN sm.middle_name IS NULL OR sm.middle_name = '' THEN '' ELSE CONCAT(' ', sm.middle_name) END,
+                CASE WHEN sm.suffix_name IS NULL OR sm.suffix_name = '' THEN '' ELSE CONCAT(' ', sm.suffix_name) END
+            )) AS student_full_name,
+            ev.subject_code,
+            ev.subject_summary,
+            ev.term_label,
+            ev.question_count,
+            ev.total_score,
+            ev.average_rating,
+            ev.submission_status,
+            ev.final_submitted_at,
+            ev.completed_at,
+            ev.updated_at
+        FROM tbl_student_faculty_evaluations ev
+        LEFT JOIN tbl_faculty f ON f.faculty_id = ev.faculty_id
+        LEFT JOIN tbl_student_management sm ON sm.student_id = ev.student_id
+        WHERE ev.student_enrollment_id IS NOT NULL
+          AND ev.faculty_id = :faculty_id
+        ORDER BY ev.updated_at DESC, ev.evaluation_id DESC"
+    );
+    $statement->execute(['faculty_id' => $facultyId]);
+
+    return $statement->fetchAll();
+}
+
+function dashboard_evaluation_rating_trend(PDO $pdo, int $months = 12): array
+{
+    ensure_evaluation_subject_scope($pdo);
+    $months = max(3, min(24, $months));
+
+    $startDate = new DateTimeImmutable('first day of this month 00:00:00');
+    $startDate = $startDate->modify('-' . ($months - 1) . ' months');
+
+    $periodKeys = [];
+    $periodLabels = [];
+    for ($index = 0; $index < $months; $index++) {
+        $period = $startDate->modify('+' . $index . ' months');
+        $periodKey = $period->format('Y-m');
+        $periodKeys[$periodKey] = $index;
+        $periodLabels[] = $period->format('M Y');
+    }
+
+    $categoryLabels = [];
+    foreach (evaluation_question_bank() as $category) {
+        $categoryKey = (string) ($category['key'] ?? '');
+        if ($categoryKey === '') {
+            continue;
+        }
+
+        $categoryLabels[$categoryKey] = ucwords(strtolower((string) ($category['title'] ?? $categoryKey)));
+    }
+
+    $seriesByCategory = [];
+    foreach ($categoryLabels as $categoryKey => $categoryLabel) {
+        $seriesByCategory[$categoryKey] = array_fill(0, $months, null);
+    }
+
+    $sql = "SELECT
+                DATE_FORMAT(COALESCE(ev.final_submitted_at, ev.updated_at, ev.completed_at, ans.created_at), '%Y-%m') AS period_key,
+                ans.category_key,
+                MAX(ans.category_title) AS category_title,
+                ROUND(AVG(ans.rating), 2) AS average_rating
+            FROM tbl_student_faculty_evaluation_answers ans
+            INNER JOIN tbl_student_faculty_evaluations ev
+                ON ev.evaluation_id = ans.evaluation_id
+            WHERE ev.student_enrollment_id IS NOT NULL
+              AND ev.submission_status = 'submitted'
+              AND ans.rating BETWEEN 1 AND 5
+              AND COALESCE(ev.final_submitted_at, ev.updated_at, ev.completed_at, ans.created_at) >= :start_date
+            GROUP BY period_key, ans.category_key
+            ORDER BY period_key ASC, ans.category_key ASC";
+
+    $statement = $pdo->prepare($sql);
+    $statement->execute(['start_date' => $startDate->format('Y-m-d H:i:s')]);
+
+    $hasData = false;
+    foreach ($statement->fetchAll() as $row) {
+        $periodKey = (string) ($row['period_key'] ?? '');
+        $categoryKey = (string) ($row['category_key'] ?? '');
+
+        if (!isset($periodKeys[$periodKey])) {
+            continue;
+        }
+
+        if (!isset($seriesByCategory[$categoryKey])) {
+            $categoryLabels[$categoryKey] = ucwords(strtolower((string) ($row['category_title'] ?? $categoryKey)));
+            $seriesByCategory[$categoryKey] = array_fill(0, $months, null);
+        }
+
+        $seriesByCategory[$categoryKey][$periodKeys[$periodKey]] = (float) ($row['average_rating'] ?? 0);
+        $hasData = true;
+    }
+
+    $series = [];
+    foreach ($categoryLabels as $categoryKey => $categoryLabel) {
+        $series[] = [
+            'name' => $categoryLabel,
+            'data' => $seriesByCategory[$categoryKey] ?? array_fill(0, $months, null),
+        ];
+    }
+
+    return [
+        'labels' => $periodLabels,
+        'series' => $series,
+        'hasData' => $hasData,
+    ];
 }
 
 function dashboard_student_preview_list(PDO $pdo, string $search = ''): array
