@@ -690,6 +690,117 @@
   letter-spacing: 0.06em;
 }
 
+.program-chair-faculty-search {
+  flex: 1 1 28rem;
+  max-width: 42rem;
+}
+
+.program-chair-faculty-search .form-control {
+  min-width: 0;
+}
+
+.program-chair-faculty-list {
+  display: grid;
+  gap: 1rem;
+  transition: opacity 0.18s ease;
+}
+
+.program-chair-faculty-list.is-loading {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.program-chair-faculty-card {
+  border: 1px solid #d9dee8;
+  border-radius: 0.5rem;
+  background: #fff;
+  box-shadow: 0 0.55rem 1.1rem rgba(67, 89, 113, 0.045);
+  padding: 1.15rem;
+}
+
+.program-chair-faculty-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(11rem, 14rem);
+  gap: 1rem;
+  align-items: start;
+}
+
+.program-chair-faculty-name {
+  color: #566a7f;
+  letter-spacing: 0;
+  margin-bottom: 1rem;
+}
+
+.program-chair-faculty-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  align-items: baseline;
+  overflow-x: visible;
+  padding-bottom: 0;
+  white-space: normal;
+}
+
+.program-chair-faculty-details .subject-meta-item {
+  display: inline-flex;
+  flex-direction: row;
+  gap: 0.3rem;
+  align-items: baseline;
+  min-width: 0;
+  line-height: 1.1;
+}
+
+.program-chair-faculty-details .subject-meta-item > span:last-child {
+  color: #566a7f;
+  min-height: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.1;
+}
+
+.program-chair-faculty-action {
+  align-self: start;
+  justify-self: end;
+  width: 100%;
+}
+
+.program-chair-faculty-action .btn {
+  min-height: 2.5rem;
+}
+
+.program-chair-page .select2-container {
+  width: 100% !important;
+}
+
+.program-chair-page .select2-container--default .select2-selection--single {
+  min-height: 2.42rem;
+  border: 1px solid #d9dee3;
+  border-radius: 0.375rem;
+  display: flex;
+  align-items: center;
+}
+
+.program-chair-page .select2-container--default .select2-selection--single .select2-selection__rendered {
+  color: #697a8d;
+  line-height: 2.35rem;
+  padding-left: 0.875rem;
+  padding-right: 2rem;
+}
+
+.program-chair-page .select2-container--default .select2-selection--single .select2-selection__arrow {
+  height: 2.35rem;
+  right: 0.45rem;
+}
+
+.program-chair-page .select2-container--default.select2-container--focus .select2-selection--single {
+  border-color: #696cff;
+  box-shadow: 0 0 0.25rem 0.05rem rgba(105, 108, 255, 0.12);
+}
+
+.program-chair-page .select2-dropdown {
+  border-color: #d9dee3;
+  border-radius: 0.375rem;
+}
+
 .scale-option-card {
   border: 1px solid #eceef1;
   border-radius: 0.85rem;
@@ -757,6 +868,12 @@
 .evaluation-rating-option input:focus + span {
   outline: 2px solid rgba(105, 108, 255, 0.22);
   outline-offset: 2px;
+}
+
+@media (max-width: 1199.98px) {
+  .program-chair-faculty-details {
+    gap: 0.3rem 0.85rem;
+  }
 }
 
 @media (max-width: 767.98px) {
@@ -883,6 +1000,74 @@
     width: 100%;
     min-width: 0;
     height: 2.85rem;
+  }
+
+  .program-chair-faculty-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .program-chair-faculty-search .input-group {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .program-chair-faculty-search .input-group-text {
+    flex: 0 0 2.75rem;
+    justify-content: center;
+  }
+
+  .program-chair-faculty-search .form-control {
+    flex: 1 1 auto;
+    width: 1%;
+    min-width: 0;
+  }
+
+  .program-chair-faculty-search .btn {
+    flex: 0 0 auto;
+    margin-left: 0 !important;
+    padding-left: 1.1rem;
+    padding-right: 1.1rem;
+  }
+
+  .program-chair-faculty-card {
+    padding: 0.95rem;
+  }
+
+  .program-chair-faculty-row {
+    grid-template-columns: 1fr;
+  }
+
+  .program-chair-faculty-details {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.26rem 0.72rem;
+    white-space: normal;
+  }
+
+  .program-chair-faculty-details .subject-meta-item {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.25rem;
+    line-height: 1;
+    min-width: 0;
+  }
+
+  .program-chair-faculty-details .subject-meta-label {
+    font-size: 0.69rem;
+    line-height: 1;
+  }
+
+  .program-chair-faculty-details .subject-meta-item > span:last-child {
+    line-height: 1;
+  }
+
+  .program-chair-faculty-name {
+    margin-bottom: 0.62rem;
+    line-height: 1.18;
   }
 }
 

@@ -23,7 +23,7 @@ $userManagementForm = [
     'user_management_id' => '',
     'email_address' => '',
     'full_name' => '',
-    'account_role' => 'staff',
+    'account_role' => 'program_chair',
     'is_active' => '1',
 ];
 
@@ -45,7 +45,7 @@ try {
                 'user_management_id' => $userId,
                 'email_address' => trim((string) ($_POST['email_address'] ?? '')),
                 'full_name' => trim((string) ($_POST['full_name'] ?? '')),
-                'account_role' => (string) ($_POST['account_role'] ?? 'staff'),
+                'account_role' => user_management_normalize_role((string) ($_POST['account_role'] ?? 'program_chair')),
                 'is_active' => !empty($_POST['is_active']) ? '1' : '0',
             ];
 
@@ -110,7 +110,7 @@ try {
                 'user_management_id' => (string) ($editingUser['user_management_id'] ?? ''),
                 'email_address' => (string) ($editingUser['email_address'] ?? ''),
                 'full_name' => (string) ($editingUser['full_name'] ?? ''),
-                'account_role' => (string) ($editingUser['account_role'] ?? 'staff'),
+                'account_role' => user_management_normalize_role((string) ($editingUser['account_role'] ?? 'program_chair')),
                 'is_active' => (int) ($editingUser['is_active'] ?? 0) === 1 ? '1' : '0',
             ];
         }
@@ -132,7 +132,7 @@ require __DIR__ . '/_start.php';
             <span class="badge bg-label-success mb-3">User Management</span>
             <h3 class="mb-2">Authorized non-student users.</h3>
             <p class="mb-0">
-              Manage the Google accounts allowed to open the administrator module before student-record matching begins.
+              Manage the Google accounts allowed to open administrator and program chair modules before student-record matching begins.
             </p>
           </div>
           <div class="col-lg-4">
@@ -165,7 +165,7 @@ require __DIR__ . '/_start.php';
     <div class="card h-100">
       <div class="card-header">
         <h5 class="mb-0">User Management</h5>
-        <small class="text-muted">Authorize non-student email addresses for Google sign-in.</small>
+        <small class="text-muted">Authorize administrator and program chair email addresses for Google sign-in.</small>
       </div>
       <div class="card-body">
         <?php if ($userManagementError !== null): ?>

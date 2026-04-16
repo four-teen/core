@@ -5,14 +5,18 @@ function user_management_role_options(): array
 {
     return [
         'administrator' => 'Administrator',
-        'staff' => 'Staff',
+        'program_chair' => 'Program Chair',
     ];
 }
 
 function user_management_role_label(string $role): string
 {
+    if ($role === 'staff') {
+        return 'Program Chair';
+    }
+
     $options = user_management_role_options();
-    return $options[$role] ?? 'Staff';
+    return $options[$role] ?? 'Program Chair';
 }
 
 function user_management_normalize_email(string $email): string
@@ -23,9 +27,13 @@ function user_management_normalize_email(string $email): string
 function user_management_normalize_role(string $role): string
 {
     $role = strtolower(trim($role));
+    if ($role === 'staff') {
+        $role = 'program_chair';
+    }
+
     $options = user_management_role_options();
 
-    return array_key_exists($role, $options) ? $role : 'staff';
+    return array_key_exists($role, $options) ? $role : 'program_chair';
 }
 
 function ensure_user_management_table(PDO $pdo): void
@@ -48,6 +56,7 @@ function ensure_user_management_table(PDO $pdo): void
             UNIQUE KEY uniq_tbl_user_management_email (email_address)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+    $pdo->exec("UPDATE tbl_user_management SET account_role = 'program_chair' WHERE account_role = 'staff'");
 
     $initialized = true;
 }
@@ -140,7 +149,7 @@ function user_management_save(PDO $pdo, array $payload, ?int $userId = null): in
 
     $email = user_management_normalize_email((string) ($payload['email_address'] ?? ''));
     $fullName = trim((string) ($payload['full_name'] ?? ''));
-    $accountRole = user_management_normalize_role((string) ($payload['account_role'] ?? 'staff'));
+    $accountRole = user_management_normalize_role((string) ($payload['account_role'] ?? 'program_chair'));
     $isActive = !empty($payload['is_active']) ? 1 : 0;
 
     if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {

@@ -2,15 +2,15 @@
 declare(strict_types=1);
 
 if (!isset($pageTitle)) {
-    $pageTitle = 'Administrator';
+    $pageTitle = 'Program Chair';
 }
 
 if (!isset($pageDescription)) {
-    $pageDescription = 'Administrator module';
+    $pageDescription = 'Program chair module';
 }
 
-if (!isset($activeAdminPage)) {
-    $activeAdminPage = 'dashboard';
+if (!isset($activeProgramChairPage)) {
+    $activeProgramChairPage = 'dashboard';
 }
 ?>
 <!DOCTYPE html>
@@ -43,19 +43,22 @@ if (!isset($activeAdminPage)) {
     <link rel="stylesheet" href="../assets/css/demo.css" />
     <link rel="stylesheet" href="../assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css" />
     <link rel="stylesheet" href="../assets/css/app.css" />
+    <?php if (isset($extraHeadContent) && is_string($extraHeadContent)): ?>
+      <?= $extraHeadContent ?>
+    <?php endif; ?>
     <script src="../assets/vendor/js/helpers.js"></script>
     <script src="../assets/js/config.js"></script>
   </head>
 
-  <body>
+  <body class="program-chair-page">
     <div class="layout-wrapper layout-content-navbar">
       <div class="layout-container">
         <aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
           <div class="app-brand demo">
-            <a href="<?= h(base_url('administrator/index.php')) ?>" class="app-brand-link">
+            <a href="<?= h(base_url('programchair/index.php')) ?>" class="app-brand-link">
               <span class="app-brand-logo demo">
                 <span class="brand-icon-shell">
-                  <i class="bx bx-bar-chart-square"></i>
+                  <i class="bx bx-user-check"></i>
                 </span>
               </span>
               <span class="app-brand-text demo menu-text fw-bolder ms-2 admin-brand-text">CORE</span>
@@ -69,40 +72,10 @@ if (!isset($activeAdminPage)) {
           <div class="menu-inner-shadow"></div>
 
           <ul class="menu-inner py-1">
-            <li class="menu-item <?= $activeAdminPage === 'dashboard' ? 'active' : '' ?>">
-              <a href="<?= h(base_url('administrator/index.php')) ?>" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-home-circle"></i>
-                <div>Dashboard</div>
-              </a>
-            </li>
-            <li class="menu-item <?= $activeAdminPage === 'faculty' ? 'active' : '' ?>">
-              <a href="<?= h(base_url('administrator/faculty.php')) ?>" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-user-pin"></i>
-                <div>Faculty</div>
-              </a>
-            </li>
-            <li class="menu-item <?= $activeAdminPage === 'program_chair' ? 'active' : '' ?>">
-              <a href="<?= h(base_url('administrator/program_chair.php')) ?>" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-user-check"></i>
-                <div>Program Chair</div>
-              </a>
-            </li>
-            <li class="menu-item <?= $activeAdminPage === 'students' ? 'active' : '' ?>">
-              <a href="<?= h(base_url('administrator/students.php')) ?>" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-group"></i>
-                <div>Students</div>
-              </a>
-            </li>
-            <li class="menu-item <?= $activeAdminPage === 'users' ? 'active' : '' ?>">
-              <a href="<?= h(base_url('administrator/users.php')) ?>" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-shield-quarter"></i>
-                <div>User Management</div>
-              </a>
-            </li>
-            <li class="menu-item <?= $activeAdminPage === 'evaluations' ? 'active' : '' ?>">
-              <a href="<?= h(base_url('administrator/evaluations.php')) ?>" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-time-five"></i>
-                <div>Recent Evaluation Activity</div>
+            <li class="menu-item <?= $activeProgramChairPage === 'dashboard' ? 'active' : '' ?>">
+              <a href="<?= h(base_url('programchair/index.php')) ?>" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-edit-alt"></i>
+                <div>Faculty Evaluations</div>
               </a>
             </li>
           </ul>
@@ -122,24 +95,24 @@ if (!isset($activeAdminPage)) {
             <div class="navbar-nav-right d-flex align-items-center justify-content-end w-100" id="navbar-collapse">
               <div class="d-flex align-items-center gap-3 admin-navbar-actions">
                 <div class="text-end admin-navbar-user">
-                  <div class="fw-semibold"><?= h($administrator['name'] ?? 'Administrator') ?></div>
+                  <div class="fw-semibold"><?= h($programChair['name'] ?? 'Program Chair') ?></div>
                   <small class="text-muted admin-navbar-meta">
-                    <?= h(user_management_role_label((string) ($administrator['role'] ?? 'administrator'))) ?>
-                    <?php if (!empty($administrator['email'])): ?>
-                      | <?= h($administrator['email']) ?>
+                    <?= h(user_management_role_label((string) ($programChair['role'] ?? 'program_chair'))) ?>
+                    <?php if (!empty($programChair['email'])): ?>
+                      | <?= h($programChair['email']) ?>
                     <?php endif; ?>
                   </small>
                 </div>
-                <?php if (!empty($administrator['picture'])): ?>
+                <?php if (!empty($programChair['picture'])): ?>
                   <img
-                    src="<?= h($administrator['picture']) ?>"
-                    alt="Administrator Avatar"
+                    src="<?= h($programChair['picture']) ?>"
+                    alt="Program Chair Avatar"
                     class="rounded-circle"
                     width="40"
                     height="40"
                   />
                 <?php else: ?>
-                  <span class="avatar-initial rounded-circle bg-label-primary">
+                  <span class="avatar-initial rounded-circle bg-label-info">
                     <i class="bx bx-user"></i>
                   </span>
                 <?php endif; ?>

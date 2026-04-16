@@ -7,16 +7,64 @@ function administrator_profile(): ?array
     return is_array($administrator) ? $administrator : null;
 }
 
+function administrator_profile_role(): string
+{
+    $administrator = administrator_profile();
+
+    if ($administrator === null) {
+        return '';
+    }
+
+    $role = trim((string) ($administrator['role'] ?? ''));
+
+    return $role === '' ? '' : user_management_normalize_role($role);
+}
+
 function is_admin_authenticated(): bool
 {
-    return administrator_profile() !== null;
+    return administrator_profile() !== null && administrator_profile_role() === 'administrator';
+}
+
+function is_program_chair_authenticated(): bool
+{
+    return administrator_profile() !== null && administrator_profile_role() === 'program_chair';
 }
 
 function require_admin_authentication(): void
 {
-    if (!is_admin_authenticated()) {
+    if (administrator_profile() === null) {
         flash('error', 'Please sign in with your authorized Google account.');
         redirect_to('auth/login.php');
+    }
+
+    if (administrator_profile_role() === '') {
+        logout_administrator();
+        flash('error', 'Please sign in again so your account role can be verified.');
+        redirect_to('auth/login.php');
+    }
+
+    if (!is_admin_authenticated()) {
+        flash('error', 'Your account is assigned to the Program Chair module.');
+        redirect_to('programchair/index.php');
+    }
+}
+
+function require_program_chair_authentication(): void
+{
+    if (administrator_profile() === null) {
+        flash('error', 'Please sign in with your authorized Google account.');
+        redirect_to('auth/login.php');
+    }
+
+    if (administrator_profile_role() === '') {
+        logout_administrator();
+        flash('error', 'Please sign in again so your account role can be verified.');
+        redirect_to('auth/login.php');
+    }
+
+    if (!is_program_chair_authenticated()) {
+        flash('error', 'Your account is assigned to the Administrator module.');
+        redirect_to('administrator/index.php');
     }
 }
 
