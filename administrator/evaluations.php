@@ -76,7 +76,7 @@ require __DIR__ . '/_start.php';
 <?php endif; ?>
 
 <div class="row g-4 mb-4">
-  <div class="col-sm-6 col-xl-4">
+  <div class="col-sm-6 col-xl-3">
     <div class="card metric-card">
       <div class="card-body">
         <span class="metric-icon bg-label-success"><i class="bx bx-check-circle"></i></span>
@@ -85,7 +85,16 @@ require __DIR__ . '/_start.php';
       </div>
     </div>
   </div>
-  <div class="col-sm-6 col-xl-4">
+  <div class="col-sm-6 col-xl-3">
+    <div class="card metric-card">
+      <div class="card-body">
+        <span class="metric-icon bg-label-info"><i class="bx bx-user-check"></i></span>
+        <div class="metric-value"><?= h(format_number($overview['evaluated_students'] ?? 0)) ?></div>
+        <div class="metric-label">Students evaluated</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
     <div class="card metric-card">
       <div class="card-body">
         <span class="metric-icon bg-label-warning"><i class="bx bx-edit"></i></span>
@@ -94,10 +103,10 @@ require __DIR__ . '/_start.php';
       </div>
     </div>
   </div>
-  <div class="col-sm-6 col-xl-4">
+  <div class="col-sm-6 col-xl-3">
     <div class="card metric-card">
       <div class="card-body">
-        <span class="metric-icon bg-label-primary"><i class="bx bx-user-check"></i></span>
+        <span class="metric-icon bg-label-primary"><i class="bx bx-user-pin"></i></span>
         <div class="metric-value"><?= h(format_number($overview['evaluated_faculty'] ?? 0)) ?></div>
         <div class="metric-label">Faculty already evaluated</div>
       </div>

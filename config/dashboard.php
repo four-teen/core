@@ -14,6 +14,7 @@ function dashboard_overview(PDO $pdo): array
             (SELECT COUNT(DISTINCT faculty_id) FROM tbl_student_management_enrolled_subjects WHERE is_active = 1 AND faculty_id <> 0) AS active_faculty,
             (SELECT COUNT(*) FROM tbl_student_faculty_evaluations WHERE submission_status = 'submitted' AND student_enrollment_id IS NOT NULL) AS submitted_evaluations,
             (SELECT COUNT(*) FROM tbl_student_faculty_evaluations WHERE submission_status = 'draft' AND student_enrollment_id IS NOT NULL) AS draft_evaluations,
+            (SELECT COUNT(DISTINCT student_id) FROM tbl_student_faculty_evaluations WHERE submission_status = 'submitted' AND student_enrollment_id IS NOT NULL) AS evaluated_students,
             (SELECT COUNT(DISTINCT faculty_id) FROM tbl_student_faculty_evaluations WHERE submission_status = 'submitted' AND faculty_id <> 0 AND student_enrollment_id IS NOT NULL) AS evaluated_faculty"
     );
 
@@ -510,6 +511,106 @@ function dashboard_evaluation_college_averages(PDO $pdo): array
         'xMin' => $scale['min'],
         'xMax' => $scale['max'],
         'tickAmount' => $scale['tickAmount'],
+    ];
+}
+
+function dashboard_evaluation_program_completion(PDO $pdo): array
+{
+    ensure_evaluation_subject_scope($pdo);
+
+    $sql = "SELECT
+                student_scope.program_id,
+                student_scope.program_code,
+                student_scope.program_name,
+                COUNT(*) AS eligible_students,
+                SUM(CASE WHEN student_scope.submitted_subjects > 0 THEN 1 ELSE 0 END) AS evaluated_students,
+                SUM(CASE WHEN student_scope.submitted_subjects >= student_scope.total_subjects THEN 1 ELSE 0 END) AS completed_students,
+                SUM(CASE WHEN student_scope.submitted_subjects > 0 AND student_scope.submitted_subjects < student_scope.total_subjects THEN 1 ELSE 0 END) AS partial_students,
+                SUM(CASE WHEN student_scope.submitted_subjects = 0 THEN 1 ELSE 0 END) AS not_started_students,
+                ROUND(
+                    SUM(CASE WHEN student_scope.submitted_subjects >= student_scope.total_subjects THEN 1 ELSE 0 END)
+                    / COUNT(*) * 100,
+                    1
+                ) AS completion_rate
+            FROM (
+                SELECT
+                    es.program_id,
+                    COALESCE(NULLIF(p.program_code, ''), CONCAT('Program ', es.program_id)) AS program_code,
+                    COALESCE(NULLIF(p.program_name, ''), CONCAT('Program ', es.program_id)) AS program_name,
+                    es.student_id,
+                    COUNT(DISTINCT es.student_enrollment_id) AS total_subjects,
+                    COUNT(DISTINCT CASE WHEN ev.submission_status = 'submitted' THEN es.student_enrollment_id END) AS submitted_subjects
+                FROM tbl_student_management_enrolled_subjects es
+                LEFT JOIN tbl_program p ON p.program_id = es.program_id
+                LEFT JOIN tbl_student_faculty_evaluations ev
+                    ON ev.student_enrollment_id = es.student_enrollment_id
+                WHERE es.is_active = 1
+                  AND es.faculty_id <> 0
+                GROUP BY es.program_id, program_code, program_name, es.student_id
+                HAVING total_subjects > 0
+            ) student_scope
+            GROUP BY student_scope.program_id, student_scope.program_code, student_scope.program_name
+            ORDER BY evaluated_students DESC, completed_students DESC, student_scope.program_code ASC";
+
+    $statement = $pdo->query($sql);
+    $rows = $statement->fetchAll();
+
+    $labels = [];
+    $completed = [];
+    $partial = [];
+    $notStarted = [];
+    $details = [];
+    $totalEvaluated = 0;
+    $totalCompleted = 0;
+    $totalEligible = 0;
+
+    foreach ($rows as $row) {
+        $programCode = strtoupper(trim((string) ($row['program_code'] ?? '')));
+        $programLabel = $programCode !== '' ? $programCode : 'PROGRAM';
+        $completedStudents = (int) ($row['completed_students'] ?? 0);
+        $partialStudents = (int) ($row['partial_students'] ?? 0);
+        $notStartedStudents = (int) ($row['not_started_students'] ?? 0);
+        $evaluatedStudents = (int) ($row['evaluated_students'] ?? 0);
+        $eligibleStudents = (int) ($row['eligible_students'] ?? 0);
+
+        $labels[] = $programLabel;
+        $completed[] = $completedStudents;
+        $partial[] = $partialStudents;
+        $notStarted[] = $notStartedStudents;
+        $details[] = [
+            'program' => $programLabel,
+            'programName' => (string) ($row['program_name'] ?? ''),
+            'eligibleStudents' => $eligibleStudents,
+            'evaluatedStudents' => $evaluatedStudents,
+            'completedStudents' => $completedStudents,
+            'partialStudents' => $partialStudents,
+            'notStartedStudents' => $notStartedStudents,
+            'completionRate' => (float) ($row['completion_rate'] ?? 0),
+        ];
+
+        $totalEvaluated += $evaluatedStudents;
+        $totalCompleted += $completedStudents;
+        $totalEligible += $eligibleStudents;
+    }
+
+    return [
+        'labels' => $labels,
+        'series' => [
+            [
+                'name' => 'Completed all subjects',
+                'data' => $completed,
+            ],
+            [
+                'name' => 'Partially evaluated',
+                'data' => $partial,
+            ],
+        ],
+        'colors' => ['#34a853', '#f29900'],
+        'details' => $details,
+        'totalEvaluated' => $totalEvaluated,
+        'totalCompleted' => $totalCompleted,
+        'totalEligible' => $totalEligible,
+        'hasData' => $rows !== [],
     ];
 }
 

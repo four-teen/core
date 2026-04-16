@@ -20,12 +20,14 @@ $evaluationCategoryAverages = [
     'highest' => null,
     'hasData' => false,
 ];
-$evaluationCollegeAverages = [
+$evaluationProgramCompletion = [
     'labels' => [],
     'series' => [],
     'colors' => [],
     'details' => [],
-    'highest' => null,
+    'totalEvaluated' => 0,
+    'totalCompleted' => 0,
+    'totalEligible' => 0,
     'hasData' => false,
 ];
 $databaseError = null;
@@ -37,7 +39,7 @@ try {
     $overview = dashboard_overview($pdo);
     $currentTerm = dashboard_current_term($pdo);
     $evaluationCategoryAverages = dashboard_evaluation_category_averages($pdo);
-    $evaluationCollegeAverages = dashboard_evaluation_college_averages($pdo);
+    $evaluationProgramCompletion = dashboard_evaluation_program_completion($pdo);
 } catch (Throwable $exception) {
     $databaseError = is_local_env()
         ? 'Unable to load dashboard data. ' . $exception->getMessage()
@@ -52,12 +54,12 @@ if ($evaluationCategoryAveragesJson === false) {
     $evaluationCategoryAveragesJson = '{"labels":[],"series":[],"colors":[],"details":[],"highest":null,"hasData":false}';
 }
 
-$evaluationCollegeAveragesJson = json_encode(
-    $evaluationCollegeAverages,
+$evaluationProgramCompletionJson = json_encode(
+    $evaluationProgramCompletion,
     JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT
 );
-if ($evaluationCollegeAveragesJson === false) {
-    $evaluationCollegeAveragesJson = '{"labels":[],"series":[],"colors":[],"details":[],"highest":null,"hasData":false}';
+if ($evaluationProgramCompletionJson === false) {
+    $evaluationProgramCompletionJson = '{"labels":[],"series":[],"colors":[],"details":[],"totalEvaluated":0,"totalCompleted":0,"totalEligible":0,"hasData":false}';
 }
 
 require __DIR__ . '/_start.php';
@@ -187,21 +189,23 @@ require __DIR__ . '/_start.php';
       <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
           <div>
-            <span class="badge bg-label-info mb-2">College Evaluation Scores</span>
-            <h5 class="mb-1">Average rating by college</h5>
-            <p class="text-muted mb-0">Submitted evaluations grouped by enrolled-subject college.</p>
+            <span class="badge bg-label-info mb-2">Program Evaluation Completion</span>
+            <h5 class="mb-1">Distinct students who evaluated by program</h5>
+            <p class="text-muted mb-0">Completed-all-subjects versus partial evaluation progress.</p>
           </div>
-          <?php if (($evaluationCollegeAverages['highest'] ?? null) !== null): ?>
+          <?php if (($evaluationProgramCompletion['totalEligible'] ?? 0) > 0): ?>
             <div class="dashboard-highest-pill">
-              <span>Highest College</span>
+              <span>Evaluated</span>
               <strong>
-                <?= h((string) $evaluationCollegeAverages['highest']['name']) ?>
-                <?= h(format_average($evaluationCollegeAverages['highest']['average'])) ?>
+                <?= h(format_number($evaluationProgramCompletion['totalEvaluated'] ?? 0)) ?>
+                /
+                <?= h(format_number($evaluationProgramCompletion['totalEligible'] ?? 0)) ?>
+                students
               </strong>
             </div>
           <?php endif; ?>
         </div>
-        <div id="evaluationCollegeAverageChart" class="evaluation-trend-chart evaluation-college-chart"></div>
+        <div id="evaluationProgramCompletionChart" class="evaluation-trend-chart evaluation-program-chart"></div>
       </div>
     </div>
   </div>
@@ -214,7 +218,7 @@ require __DIR__ . '/_start.php';
     }
 
     var categoryData = <?= $evaluationCategoryAveragesJson ?>;
-    var collegeData = <?= $evaluationCollegeAveragesJson ?>;
+    var programData = <?= $evaluationProgramCompletionJson ?>;
 
     function normalizeLabels(labels) {
       return (Array.isArray(labels) ? labels : []).map(function (label) {
@@ -358,15 +362,161 @@ require __DIR__ . '/_start.php';
       chart.render();
     }
 
+    function renderProgramCompletionChart(selector, chartData, emptyText) {
+      var chartElement = document.querySelector(selector);
+
+      if (!chartElement) {
+        return;
+      }
+
+      var hasData = Boolean(chartData.hasData);
+      var axisLabels = normalizeLabels(chartData.labels);
+      var colors = Array.isArray(chartData.colors) && chartData.colors.length
+        ? chartData.colors
+        : ['#34a853', '#f29900'];
+
+      var chart = new ApexCharts(chartElement, {
+        chart: {
+          type: 'bar',
+          stacked: true,
+          height: Math.max(280, axisLabels.length * 64 + 135),
+          fontFamily: 'Public Sans, sans-serif',
+          toolbar: { show: false },
+          zoom: { enabled: false },
+          animations: {
+            enabled: true,
+            easing: 'easeinout',
+            speed: 700
+          }
+        },
+        series: hasData ? chartData.series : [],
+        colors: colors,
+        plotOptions: {
+          bar: {
+            horizontal: true,
+            borderRadius: 8,
+            barHeight: '56%',
+            dataLabels: {
+              total: {
+                enabled: true,
+                offsetX: 8,
+                style: {
+                  color: '#566a7f',
+                  fontSize: '12px',
+                  fontWeight: 700
+                }
+              }
+            }
+          }
+        },
+        dataLabels: {
+          enabled: true,
+          formatter: function (value) {
+            return value > 0 ? String(value) : '';
+          },
+          style: {
+            colors: ['#ffffff'],
+            fontSize: '12px',
+            fontWeight: 700
+          }
+        },
+        grid: {
+          borderColor: '#eef1f6',
+          strokeDashArray: 4,
+          padding: {
+            top: 4,
+            right: 24,
+            bottom: 4,
+            left: 8
+          }
+        },
+        legend: {
+          show: true,
+          position: 'top',
+          horizontalAlign: 'left',
+          fontSize: '13px',
+          fontWeight: 600,
+          labels: {
+            colors: '#566a7f'
+          },
+          markers: {
+            width: 10,
+            height: 10,
+            radius: 10
+          }
+        },
+        xaxis: {
+          categories: axisLabels,
+          labels: {
+            formatter: function (value) {
+              return String(Math.round(Number(value)));
+            },
+            style: { colors: '#8592a3', fontSize: '12px' }
+          },
+          axisBorder: { show: false },
+          axisTicks: { show: false },
+          title: {
+            text: 'Distinct students',
+            style: {
+              color: '#8592a3',
+              fontSize: '12px',
+              fontWeight: 600
+            }
+          }
+        },
+        yaxis: {
+          labels: {
+            maxWidth: 220,
+            style: {
+              colors: '#566a7f',
+              fontSize: '12px',
+              fontWeight: 700
+            }
+          }
+        },
+        tooltip: {
+          y: {
+            formatter: function (value, options) {
+              var details = Array.isArray(chartData.details) ? chartData.details : [];
+              var detail = details[options.dataPointIndex] || {};
+              var suffix = '';
+
+              if (detail.eligibleStudents) {
+                suffix = ' | ' + detail.evaluatedStudents + ' evaluated, ' + detail.notStartedStudents + ' not started of ' + detail.eligibleStudents + ' eligible';
+              }
+
+              if (detail.completionRate || detail.completionRate === 0) {
+                suffix += ' | ' + Number(detail.completionRate).toFixed(1) + '% complete';
+              }
+
+              return String(value) + ' students' + suffix;
+            }
+          }
+        },
+        noData: {
+          text: emptyText,
+          align: 'center',
+          verticalAlign: 'middle',
+          style: {
+            color: '#8592a3',
+            fontSize: '14px',
+            fontFamily: 'Public Sans, sans-serif'
+          }
+        }
+      });
+
+      chart.render();
+    }
+
     renderRatingBarChart(
       '#evaluationCategoryAverageChart',
       categoryData,
       'No submitted category ratings yet'
     );
-    renderRatingBarChart(
-      '#evaluationCollegeAverageChart',
-      collegeData,
-      'No submitted college ratings yet'
+    renderProgramCompletionChart(
+      '#evaluationProgramCompletionChart',
+      programData,
+      'No program evaluation progress yet'
     );
   });
 </script>
