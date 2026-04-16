@@ -381,23 +381,20 @@ function dashboard_evaluation_category_averages(PDO $pdo): array
         $hasData = true;
     }
 
-    $labels = [];
-    $data = [];
-    $colors = [];
     $details = [];
     $highest = null;
     $baseColors = ['#696cff', '#03c3ec', '#f29900', '#34a853', '#ff6b35'];
     $index = 0;
 
     foreach ($categories as $category) {
-        $labels[] = $category['label'];
         $value = $category['average'];
-        $data[] = $value;
         $details[] = [
             'name' => $category['name'],
+            'label' => $category['label'],
             'average' => $value,
             'responses' => $category['responses'],
             'evaluations' => $category['evaluations'],
+            'color' => $baseColors[$index % count($baseColors)],
         ];
 
         if ($value !== null && ($highest === null || $value > (float) $highest['average'])) {
@@ -407,17 +404,23 @@ function dashboard_evaluation_category_averages(PDO $pdo): array
             ];
         }
 
-        $colors[] = $baseColors[$index % count($baseColors)];
         $index++;
     }
 
-    if ($highest !== null) {
-        foreach ($details as $detailIndex => $detail) {
-            if ($detail['name'] === $highest['name']) {
-                $colors[$detailIndex] = '#f29900';
-            }
-        }
+    usort($details, static function (array $left, array $right): int {
+        return ((float) ($right['average'] ?? -1)) <=> ((float) ($left['average'] ?? -1));
+    });
+
+    $labels = [];
+    $data = [];
+    $colors = [];
+    foreach ($details as $detail) {
+        $labels[] = $detail['label'];
+        $data[] = $detail['average'];
+        $colors[] = $detail['color'];
     }
+
+    $scale = dashboard_rating_axis_scale($data);
 
     return [
         'labels' => $labels,
@@ -431,6 +434,113 @@ function dashboard_evaluation_category_averages(PDO $pdo): array
         'details' => $details,
         'highest' => $highest,
         'hasData' => $hasData,
+        'xMin' => $scale['min'],
+        'xMax' => $scale['max'],
+        'tickAmount' => $scale['tickAmount'],
+    ];
+}
+
+function dashboard_evaluation_college_averages(PDO $pdo): array
+{
+    ensure_evaluation_subject_scope($pdo);
+
+    $sql = "SELECT
+                es.college_id,
+                COUNT(*) AS evaluation_count,
+                COUNT(DISTINCT ev.student_id) AS student_count,
+                COUNT(DISTINCT es.program_id) AS program_count,
+                ROUND(AVG(NULLIF(ev.average_rating, 0)), 2) AS average_rating
+            FROM tbl_student_faculty_evaluations ev
+            INNER JOIN tbl_student_management_enrolled_subjects es
+                ON es.student_enrollment_id = ev.student_enrollment_id
+            WHERE ev.student_enrollment_id IS NOT NULL
+              AND ev.submission_status = 'submitted'
+              AND ev.average_rating > 0
+            GROUP BY es.college_id
+            ORDER BY average_rating DESC, evaluation_count DESC, es.college_id ASC";
+
+    $statement = $pdo->query($sql);
+    $rows = $statement->fetchAll();
+
+    $labels = [];
+    $data = [];
+    $colors = [];
+    $details = [];
+    $baseColors = ['#03c3ec', '#696cff', '#34a853', '#f29900', '#ff6b35'];
+    $highest = null;
+
+    foreach ($rows as $index => $row) {
+        $collegeId = (int) ($row['college_id'] ?? 0);
+        $collegeLabel = $collegeId > 0 ? 'College ' . $collegeId : 'Unassigned College';
+        $average = (float) ($row['average_rating'] ?? 0);
+
+        $labels[] = $collegeLabel;
+        $data[] = $average;
+        $colors[] = $baseColors[$index % count($baseColors)];
+        $details[] = [
+            'name' => $collegeLabel,
+            'average' => $average,
+            'evaluations' => (int) ($row['evaluation_count'] ?? 0),
+            'students' => (int) ($row['student_count'] ?? 0),
+            'programs' => (int) ($row['program_count'] ?? 0),
+        ];
+
+        if ($highest === null || $average > (float) $highest['average']) {
+            $highest = [
+                'name' => $collegeLabel,
+                'average' => $average,
+            ];
+        }
+    }
+
+    $scale = dashboard_rating_axis_scale($data);
+
+    return [
+        'labels' => $labels,
+        'series' => [
+            [
+                'name' => 'Average Rating',
+                'data' => $data,
+            ],
+        ],
+        'colors' => $colors,
+        'details' => $details,
+        'highest' => $highest,
+        'hasData' => $rows !== [],
+        'xMin' => $scale['min'],
+        'xMax' => $scale['max'],
+        'tickAmount' => $scale['tickAmount'],
+    ];
+}
+
+function dashboard_rating_axis_scale(array $values): array
+{
+    $numericValues = array_values(array_filter($values, static function ($value): bool {
+        return $value !== null && is_numeric($value);
+    }));
+
+    if ($numericValues === []) {
+        return [
+            'min' => 0,
+            'max' => 5,
+            'tickAmount' => 5,
+        ];
+    }
+
+    $minimum = min($numericValues);
+    $maximum = max($numericValues);
+    $axisMin = max(0, floor(($minimum - 0.08) * 10) / 10);
+    $axisMax = min(5, ceil(($maximum + 0.08) * 10) / 10);
+
+    if ($axisMax - $axisMin < 0.4) {
+        $axisMin = max(0, $axisMin - 0.1);
+        $axisMax = min(5, $axisMax + 0.1);
+    }
+
+    return [
+        'min' => $axisMin,
+        'max' => $axisMax,
+        'tickAmount' => max(2, (int) round(($axisMax - $axisMin) / 0.1)),
     ];
 }
 

@@ -20,6 +20,14 @@ $evaluationCategoryAverages = [
     'highest' => null,
     'hasData' => false,
 ];
+$evaluationCollegeAverages = [
+    'labels' => [],
+    'series' => [],
+    'colors' => [],
+    'details' => [],
+    'highest' => null,
+    'hasData' => false,
+];
 $databaseError = null;
 $noticeMessage = flash('notice');
 $errorMessage = flash('error');
@@ -29,6 +37,7 @@ try {
     $overview = dashboard_overview($pdo);
     $currentTerm = dashboard_current_term($pdo);
     $evaluationCategoryAverages = dashboard_evaluation_category_averages($pdo);
+    $evaluationCollegeAverages = dashboard_evaluation_college_averages($pdo);
 } catch (Throwable $exception) {
     $databaseError = is_local_env()
         ? 'Unable to load dashboard data. ' . $exception->getMessage()
@@ -41,6 +50,14 @@ $evaluationCategoryAveragesJson = json_encode(
 );
 if ($evaluationCategoryAveragesJson === false) {
     $evaluationCategoryAveragesJson = '{"labels":[],"series":[],"colors":[],"details":[],"highest":null,"hasData":false}';
+}
+
+$evaluationCollegeAveragesJson = json_encode(
+    $evaluationCollegeAverages,
+    JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT
+);
+if ($evaluationCollegeAveragesJson === false) {
+    $evaluationCollegeAveragesJson = '{"labels":[],"series":[],"colors":[],"details":[],"highest":null,"hasData":false}';
 }
 
 require __DIR__ . '/_start.php';
@@ -139,8 +156,8 @@ require __DIR__ . '/_start.php';
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
           <div>
             <span class="badge bg-label-primary mb-2">Evaluation Category Scores</span>
-            <h5 class="mb-1">Average rating by evaluation category</h5>
-            <p class="text-muted mb-0">Submitted evaluation ratings grouped by criteria.</p>
+            <h5 class="mb-1">Ranked average rating by category</h5>
+            <p class="text-muted mb-0">Submitted evaluation ratings sorted from highest to lowest.</p>
           </div>
           <div class="dashboard-chart-actions">
             <?php if (($evaluationCategoryAverages['highest'] ?? null) !== null): ?>
@@ -163,22 +180,68 @@ require __DIR__ . '/_start.php';
     </div>
   </div>
 </div>
+
+<div class="row g-4 mb-4">
+  <div class="col-12">
+    <div class="card dashboard-trend-card">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <span class="badge bg-label-info mb-2">College Evaluation Scores</span>
+            <h5 class="mb-1">Average rating by college</h5>
+            <p class="text-muted mb-0">Submitted evaluations grouped by enrolled-subject college.</p>
+          </div>
+          <?php if (($evaluationCollegeAverages['highest'] ?? null) !== null): ?>
+            <div class="dashboard-highest-pill">
+              <span>Highest College</span>
+              <strong>
+                <?= h((string) $evaluationCollegeAverages['highest']['name']) ?>
+                <?= h(format_average($evaluationCollegeAverages['highest']['average'])) ?>
+              </strong>
+            </div>
+          <?php endif; ?>
+        </div>
+        <div id="evaluationCollegeAverageChart" class="evaluation-trend-chart evaluation-college-chart"></div>
+      </div>
+    </div>
+  </div>
+</div>
 <script src="<?= h(asset_url('assets/vendor/libs/apex-charts/apexcharts.js')) ?>"></script>
 <script>
   window.addEventListener('DOMContentLoaded', function () {
-    var chartElement = document.querySelector('#evaluationCategoryAverageChart');
-
-    if (!chartElement || typeof ApexCharts === 'undefined') {
+    if (typeof ApexCharts === 'undefined') {
       return;
     }
 
     var categoryData = <?= $evaluationCategoryAveragesJson ?>;
-    var hasCategoryData = Boolean(categoryData.hasData);
+    var collegeData = <?= $evaluationCollegeAveragesJson ?>;
 
-    var chart = new ApexCharts(chartElement, {
+    function normalizeLabels(labels) {
+      return (Array.isArray(labels) ? labels : []).map(function (label) {
+        return Array.isArray(label) ? label.join(' ') : label;
+      });
+    }
+
+    function renderRatingBarChart(selector, chartData, emptyText) {
+      var chartElement = document.querySelector(selector);
+
+      if (!chartElement) {
+        return;
+      }
+
+      var hasData = Boolean(chartData.hasData);
+      var xMin = Number(chartData.xMin);
+      var xMax = Number(chartData.xMax);
+      var tickAmount = Number(chartData.tickAmount);
+      var axisLabels = normalizeLabels(chartData.labels);
+      var colors = Array.isArray(chartData.colors) && chartData.colors.length
+        ? chartData.colors
+        : ['#696cff', '#03c3ec', '#f29900', '#34a853'];
+
+      var chart = new ApexCharts(chartElement, {
       chart: {
         type: 'bar',
-        height: 380,
+        height: Math.max(260, axisLabels.length * 60 + 120),
         fontFamily: 'Public Sans, sans-serif',
         toolbar: { show: false },
         zoom: { enabled: false },
@@ -188,21 +251,25 @@ require __DIR__ . '/_start.php';
           speed: 700
         }
       },
-      series: hasCategoryData ? categoryData.series : [],
-      colors: categoryData.colors || ['#696cff', '#03c3ec', '#f29900', '#34a853'],
+      series: hasData ? chartData.series : [],
+      colors: colors,
       plotOptions: {
         bar: {
+          horizontal: true,
           distributed: true,
-          borderRadius: 7,
-          columnWidth: '45%',
+          borderRadius: 8,
+          barHeight: '54%',
           dataLabels: {
-            position: 'top'
+            position: 'right'
           }
         }
       },
+      stroke: {
+        width: 0
+      },
       dataLabels: {
         enabled: true,
-        offsetY: -20,
+        offsetX: 12,
         formatter: function (value) {
           if (value === null || typeof value === 'undefined') {
             return '';
@@ -230,45 +297,54 @@ require __DIR__ . '/_start.php';
         show: false
       },
       xaxis: {
-        categories: categoryData.labels || [],
-        labels: {
-          rotate: 0,
-          trim: false,
-          style: {
-            colors: '#566a7f',
-            fontSize: '12px',
-            fontWeight: 600
-          }
-        },
-        axisBorder: { show: false },
-        axisTicks: { show: false }
-      },
-      yaxis: {
-        min: 0,
-        max: 5,
-        tickAmount: 5,
+        categories: axisLabels,
+        min: Number.isFinite(xMin) ? xMin : 0,
+        max: Number.isFinite(xMax) ? xMax : 5,
+        tickAmount: Number.isFinite(tickAmount) ? tickAmount : 5,
         labels: {
           formatter: function (value) {
             return Number(value).toFixed(1);
           },
           style: { colors: '#8592a3', fontSize: '12px' }
+        },
+        axisBorder: { show: false },
+        axisTicks: { show: false }
+      },
+      yaxis: {
+        labels: {
+          maxWidth: 280,
+          style: {
+            colors: '#566a7f',
+            fontSize: '12px',
+            fontWeight: 600
+          }
         }
       },
       tooltip: {
-        shared: false,
-        intersect: true,
         y: {
-          formatter: function (value) {
+          formatter: function (value, options) {
             if (value === null || typeof value === 'undefined') {
               return 'No rating';
             }
 
-            return Number(value).toFixed(2);
+            var details = Array.isArray(chartData.details) ? chartData.details : [];
+            var detail = details[options.dataPointIndex] || {};
+            var meta = [];
+
+            if (detail.evaluations) {
+              meta.push(detail.evaluations + ' evaluations');
+            }
+
+            if (detail.students) {
+              meta.push(detail.students + ' students');
+            }
+
+            return Number(value).toFixed(2) + (meta.length ? ' | ' + meta.join(', ') : '');
           }
         }
       },
       noData: {
-        text: 'No submitted category ratings yet',
+        text: emptyText,
         align: 'center',
         verticalAlign: 'middle',
         style: {
@@ -279,7 +355,19 @@ require __DIR__ . '/_start.php';
       }
     });
 
-    chart.render();
+      chart.render();
+    }
+
+    renderRatingBarChart(
+      '#evaluationCategoryAverageChart',
+      categoryData,
+      'No submitted category ratings yet'
+    );
+    renderRatingBarChart(
+      '#evaluationCollegeAverageChart',
+      collegeData,
+      'No submitted college ratings yet'
+    );
   });
 </script>
 <?php require __DIR__ . '/_end.php'; ?>
