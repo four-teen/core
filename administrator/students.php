@@ -96,9 +96,9 @@ require __DIR__ . '/_start.php';
           <h5 class="mb-0">Students List and Preview Mode</h5>
           <small class="text-muted">Search a student and open the student portal without signing in as that student.</small>
         </div>
-        <a href="<?= h(base_url('student/login.php')) ?>" class="btn btn-outline-primary btn-sm">
+        <a href="<?= h(base_url('auth/login.php')) ?>" class="btn btn-outline-primary btn-sm">
           <i class="bx bx-link-external me-1"></i>
-          Student Login Page
+          Main Login Page
         </a>
       </div>
       <div class="card-body">

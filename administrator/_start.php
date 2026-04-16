@@ -26,7 +26,7 @@ if (!isset($activeAdminPage)) {
     <meta charset="utf-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
+      content="width=device-width, initial-scale=1.0"
     />
     <title><?= h(app_name()) ?> | <?= h($pageTitle) ?></title>
     <meta name="description" content="<?= h($pageDescription) ?>" />
@@ -102,10 +102,10 @@ if (!isset($activeAdminPage)) {
             </div>
 
             <div class="navbar-nav-right d-flex align-items-center justify-content-end w-100" id="navbar-collapse">
-              <div class="d-flex align-items-center gap-3">
-                <div class="text-end">
+              <div class="d-flex align-items-center gap-3 admin-navbar-actions">
+                <div class="text-end admin-navbar-user">
                   <div class="fw-semibold"><?= h($administrator['name'] ?? 'Administrator') ?></div>
-                  <small class="text-muted">
+                  <small class="text-muted admin-navbar-meta">
                     <?= h(user_management_role_label((string) ($administrator['role'] ?? 'administrator'))) ?>
                     <?php if (!empty($administrator['email'])): ?>
                       | <?= h($administrator['email']) ?>

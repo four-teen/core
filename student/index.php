@@ -22,6 +22,8 @@ $studentRecord = null;
 $summary = [];
 $subjects = [];
 $evaluations = [];
+$studentQrPayload = '';
+$studentQrSvg = '';
 $pageError = null;
 $noticeMessage = flash('notice');
 $errorMessage = flash('error');
@@ -38,12 +40,17 @@ try {
 
         logout_student();
         flash('error', 'Your student record could not be loaded. Please sign in again.');
-        redirect_to('student/login.php');
+        redirect_to('auth/login.php');
     }
 
     $summary = student_portal_summary($pdo, $targetStudentId);
     $subjects = student_portal_subjects($pdo, $targetStudentId);
     $evaluations = student_portal_evaluations($pdo, $targetStudentId);
+
+    if ($studentRecord !== null) {
+        $studentQrPayload = student_portal_qr_payload($studentRecord);
+        $studentQrSvg = student_portal_qr_svg($studentQrPayload);
+    }
 } catch (Throwable $exception) {
     $pageError = is_local_env()
         ? 'Unable to load the student portal. ' . $exception->getMessage()
@@ -63,7 +70,7 @@ try {
     <meta charset="utf-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
+      content="width=device-width, initial-scale=1.0"
     />
     <title><?= h(app_name()) ?> | Student Portal</title>
     <meta name="description" content="Student portal for faculty evaluation details." />
@@ -92,17 +99,17 @@ try {
               <span class="brand-icon-shell student-brand-shell">
                 <i class="bx bx-user-circle"></i>
               </span>
-              <div>
+              <div class="portal-navbar-brand-copy">
                 <div class="fw-bolder"><?= h(app_name()) ?></div>
                 <small class="text-muted">Student Portal</small>
               </div>
             </div>
             <div class="navbar-nav-right d-flex align-items-center justify-content-end w-100">
               <?php if ($isPreviewMode): ?>
-                <div class="d-flex align-items-center gap-3">
-                  <div class="text-end">
+                <div class="d-flex align-items-center gap-3 portal-navbar-actions">
+                  <div class="text-end portal-navbar-user">
                     <div class="fw-semibold">Preview by <?= h($administrator['name'] ?? 'Administrator') ?></div>
-                    <small class="text-muted"><?= h($administrator['email'] ?? '') ?></small>
+                    <small class="text-muted portal-navbar-meta"><?= h($administrator['email'] ?? '') ?></small>
                   </div>
                   <a href="<?= h(base_url('administrator/students.php')) ?>" class="btn btn-outline-secondary btn-sm">
                     <i class="bx bx-left-arrow-alt me-1"></i>
@@ -110,10 +117,10 @@ try {
                   </a>
                 </div>
               <?php else: ?>
-                <div class="d-flex align-items-center gap-3">
-                  <div class="text-end">
+                <div class="d-flex align-items-center gap-3 portal-navbar-actions">
+                  <div class="text-end portal-navbar-user">
                     <div class="fw-semibold"><?= h($studentSession['name'] ?? 'Student') ?></div>
-                    <small class="text-muted"><?= h($studentSession['email'] ?? '') ?></small>
+                    <small class="text-muted portal-navbar-meta"><?= h($studentSession['email'] ?? '') ?></small>
                   </div>
                   <a href="<?= h(base_url('student/logout.php')) ?>" class="btn btn-outline-secondary btn-sm">
                     <i class="bx bx-log-out-circle me-1"></i>
@@ -149,21 +156,29 @@ try {
                   <div class="col-12">
                     <div class="card hero-panel student-hero-card">
                       <div class="card-body">
-                        <div class="student-hero-content">
-                          <span class="badge student-hero-kicker mb-3">Student Portal</span>
-                          <h3 class="mb-2"><?= h($studentRecord['full_name']) ?></h3>
-                          <p class="student-hero-subtitle mb-3">
-                            Review your active subjects and continue your faculty evaluations from one streamlined dashboard.
-                          </p>
-                          <div class="student-hero-meta">
-                            <span class="student-hero-chip">
-                              <i class="bx bx-id-card"></i>
-                              Student No. <?= h((string) $studentRecord['student_number']) ?>
-                            </span>
-                            <span class="student-hero-chip">
-                              <i class="bx bx-medal"></i>
-                              <?= h(format_year_level($studentRecord['year_level'])) ?>
-                            </span>
+                        <div class="student-hero-layout">
+                          <div class="student-hero-content">
+                            <span class="badge student-hero-kicker mb-3">Student Portal</span>
+                            <h3 class="mb-2"><?= h($studentRecord['full_name']) ?></h3>
+                            <p class="student-hero-subtitle mb-3">
+                              Review your active subjects and continue your faculty evaluations.
+                            </p>
+                            <div class="student-hero-meta">
+                              <span class="student-hero-chip">
+                                <i class="bx bx-id-card"></i>
+                                Student No. <?= h((string) $studentRecord['student_number']) ?>
+                              </span>
+                              <span class="student-hero-chip">
+                                <i class="bx bx-medal"></i>
+                                <?= h(format_year_level($studentRecord['year_level'])) ?>
+                              </span>
+                            </div>
+                          </div>
+
+                          <div class="student-qr-check">
+                            <div class="student-qr-frame">
+                              <?= $studentQrSvg ?>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -215,7 +230,6 @@ try {
                     <div class="card student-section-card">
                       <div class="card-header">
                         <h5 class="mb-0">Your Subjects</h5>
-                        <small class="text-muted">Mobile-friendly subject cards with evaluation actions.</small>
                       </div>
                       <div class="card-body">
                         <div class="row g-4">
@@ -230,10 +244,16 @@ try {
                             $isSubmittedSubject = ($row['submission_status'] ?? '') === 'submitted';
                             $isDraftSubject = ($row['submission_status'] ?? '') === 'draft';
                             $buttonLabel = 'Evaluate Teacher';
+                            $buttonClass = 'btn-primary';
+                            $buttonIcon = 'bx-edit-alt';
                             if ($isSubmittedSubject) {
-                                $buttonLabel = 'View Submitted Evaluation';
+                                $buttonLabel = 'Submitted';
+                                $buttonClass = 'btn-success';
+                                $buttonIcon = 'bx-check-circle';
                             } elseif ($isDraftSubject) {
-                                $buttonLabel = 'Continue Evaluation';
+                                $buttonLabel = 'Edit Evaluation';
+                                $buttonClass = 'btn-warning';
+                                $buttonIcon = 'bx-edit';
                             }
                             ?>
                             <div class="col-12 col-lg-6">
@@ -291,9 +311,9 @@ try {
                                     <?php else: ?>
                                       <a
                                         href="<?= h(base_url('student/evaluate.php?enrollment_id=' . (string) $row['student_enrollment_id'])) ?>"
-                                        class="btn btn-primary w-100"
+                                        class="btn <?= h($buttonClass) ?> w-100"
                                       >
-                                        <i class="bx bx-edit-alt me-1"></i>
+                                        <i class="bx <?= h($buttonIcon) ?> me-1"></i>
                                         <?= h($buttonLabel) ?>
                                       </a>
                                     <?php endif; ?>
@@ -313,7 +333,6 @@ try {
                     <div class="card student-section-card">
                       <div class="card-header">
                         <h5 class="mb-0">Evaluation Records</h5>
-                        <small class="text-muted">Your saved drafts and submitted evaluations.</small>
                       </div>
                       <div class="card-body">
                         <div class="row g-4">
@@ -341,7 +360,7 @@ try {
                                       <strong><?= h(format_average($row['average_rating'])) ?></strong>
                                     </div>
                                     <div class="subject-meta-item">
-                                      <span class="subject-meta-label">Subjects Covered</span>
+                                      <span class="subject-meta-label">Subject</span>
                                       <span><?= h((string) $row['subject_summary']) ?></span>
                                     </div>
                                     <div class="subject-meta-item">

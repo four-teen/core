@@ -3,12 +3,25 @@ declare(strict_types=1);
 
 function google_client_id(): string
 {
-    return env('GOOGLE_CLIENT_ID', '') ?? '';
+    return google_oauth_env_value('GOOGLE_CLIENT_ID');
 }
 
 function google_client_secret(): string
 {
-    return env('GOOGLE_CLIENT_SECRET', '') ?? '';
+    return google_oauth_env_value('GOOGLE_CLIENT_SECRET');
+}
+
+function google_oauth_env_value(string $key): string
+{
+    $value = trim((string) (env($key, '') ?? ''));
+    $placeholderValues = [
+        '',
+        'your-google-client-id',
+        'your-google-client-secret',
+        'your-google-redirect-uri',
+    ];
+
+    return in_array(strtolower($value), $placeholderValues, true) ? '' : $value;
 }
 
 function google_redirect_uri(): string

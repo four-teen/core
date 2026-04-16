@@ -36,7 +36,7 @@ try {
         redirect_to('student/index.php');
     }
 
-    $evaluation = create_or_get_evaluation($pdo, $context);
+    $evaluation = find_evaluation_by_context($pdo, (int) $context['student_enrollment_id']);
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (($evaluation['submission_status'] ?? '') === 'submitted') {
@@ -47,12 +47,19 @@ try {
         $action = (string) ($_POST['action'] ?? '');
         $commentText = trim((string) ($_POST['comment_text'] ?? ''));
         $submittedAnswers = isset($_POST['answers']) && is_array($_POST['answers']) ? $_POST['answers'] : [];
+        $answers = evaluation_submitted_answer_values($submittedAnswers);
 
         if ($action !== 'save_draft' && $action !== 'submit_evaluation') {
             throw new RuntimeException('Invalid evaluation action.');
         }
 
+        if ($action === 'save_draft' && trim($commentText) === '' && !evaluation_has_any_answer($submittedAnswers)) {
+            throw new RuntimeException('Select at least one rating or add a comment before saving a draft.');
+        }
+
         $status = $action === 'submit_evaluation' ? 'submitted' : 'draft';
+        normalize_evaluation_answers($submittedAnswers, $status === 'submitted');
+        $evaluation = create_or_get_evaluation($pdo, $context);
         $evaluation = save_evaluation_submission(
             $pdo,
             $evaluation,
@@ -71,12 +78,16 @@ try {
         redirect_to('student/evaluate.php?enrollment_id=' . (string) $enrollmentId);
     }
 
-    $answers = find_evaluation_answers($pdo, (int) $evaluation['evaluation_id']);
-    $commentText = (string) ($evaluation['comment_text'] ?? '');
+    if ($evaluation !== null) {
+        $answers = find_evaluation_answers($pdo, (int) $evaluation['evaluation_id']);
+        $commentText = (string) ($evaluation['comment_text'] ?? '');
+    }
 } catch (Throwable $exception) {
-    $pageError = is_local_env()
+    $pageError = $_SERVER['REQUEST_METHOD'] === 'POST'
+        ? $exception->getMessage()
+        : (is_local_env()
         ? 'Unable to load the evaluation form. ' . $exception->getMessage()
-        : 'Unable to load the evaluation form right now. Please try again.';
+        : 'Unable to load the evaluation form right now. Please try again.');
 }
 
 $questionBank = evaluation_question_bank();
@@ -96,7 +107,7 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
     <meta charset="utf-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
+      content="width=device-width, initial-scale=1.0"
     />
     <title><?= h(app_name()) ?> | Faculty Evaluation</title>
     <meta name="description" content="Faculty evaluation form for students." />
@@ -116,7 +127,7 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
     <script src="../assets/vendor/js/helpers.js"></script>
     <script src="../assets/js/config.js"></script>
   </head>
-  <body>
+  <body class="student-evaluation-page">
     <div class="layout-wrapper layout-content-navbar">
       <div class="layout-container">
         <div class="layout-page">
@@ -125,16 +136,18 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
               <span class="brand-icon-shell student-brand-shell">
                 <i class="bx bx-edit-alt"></i>
               </span>
-              <div>
+              <div class="portal-navbar-brand-copy">
                 <div class="fw-bolder"><?= h(app_name()) ?></div>
                 <small class="text-muted">Faculty Evaluation</small>
               </div>
             </div>
             <div class="navbar-nav-right d-flex align-items-center justify-content-end w-100">
-              <a href="<?= h(base_url('student/index.php')) ?>" class="btn btn-outline-secondary btn-sm">
-                <i class="bx bx-left-arrow-alt me-1"></i>
-                Back to Student Portal
-              </a>
+              <div class="d-flex align-items-center gap-3 portal-navbar-actions">
+                <a href="<?= h(base_url('student/index.php')) ?>" class="btn btn-outline-secondary btn-sm">
+                  <i class="bx bx-left-arrow-alt me-1"></i>
+                  Back to Student Portal
+                </a>
+              </div>
             </div>
           </nav>
 
@@ -152,7 +165,7 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
                 <div class="alert alert-danger" role="alert"><?= h($pageError) ?></div>
               <?php endif; ?>
 
-              <?php if ($context !== null && $evaluation !== null): ?>
+              <?php if ($context !== null): ?>
                 <div class="row g-4 mb-4">
                   <div class="col-lg-8">
                     <div class="card hero-panel h-100">
@@ -172,7 +185,7 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
                           </div>
                           <div class="col-md-6">
                             <div class="module-note">
-                              <span class="badge bg-label-success mb-2">Subjects Covered</span>
+                              <span class="badge bg-label-success mb-2">Subject</span>
                               <div><?= h((string) $context['subject_summary']) ?></div>
                             </div>
                           </div>
@@ -235,7 +248,6 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
                                           value="<?= h((string) $score) ?>"
                                           <?= $selectedValue === $score ? 'checked' : '' ?>
                                           <?= $isSubmitted ? 'disabled' : '' ?>
-                                          required
                                         />
                                         <span><?= h((string) $score) ?></span>
                                       </label>

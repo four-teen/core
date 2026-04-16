@@ -15,9 +15,8 @@ $errorMessage = flash('error');
 $noticeMessage = flash('notice');
 $googleReady = google_configuration_is_ready();
 $allowedDomain = primary_administrator_domain();
-$googleAccessMessage = $allowedDomain !== null
-    ? 'Use one Google sign-in button for authorized users and enrolled students. Administrator access is limited to approved ' . $allowedDomain . ' accounts, while student access is matched from enrolled records.'
-    : 'Use one Google sign-in button for authorized users and enrolled students. The system automatically opens the correct portal based on your account.';
+$loginHeading = preg_replace('/^\s*CORE\s+/i', '', app_name()) ?: app_name();
+$googleAccessMessage = 'Use one Google sign-in button for authorized users and enrolled students. Administrator access is limited to approved sksu.edu.ph accounts, while student access is matched from enrolled records.';
 $googleButtonCaption = $allowedDomain !== null
     ? 'Administrator and student access use this same Google sign-in'
     : 'The system routes administrators, staff, and students automatically';
@@ -35,12 +34,12 @@ $googleButtonCaption = $allowedDomain !== null
     <meta charset="utf-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
+      content="width=device-width, initial-scale=1.0"
     />
 
     <title><?= h(app_name()) ?> | Sign In</title>
 
-    <meta name="description" content="Sign in for CORE Faculty Evaluation." />
+    <meta name="description" content="Sign in for Faculty Evaluation." />
 
     <link rel="icon" type="image/x-icon" href="<?= h(asset_url('assets/img/favicon/favicon.ico')) ?>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -76,15 +75,11 @@ $googleButtonCaption = $allowedDomain !== null
 
         <div class="auth-login-panel">
           <div class="auth-login-heading">
-            <h2><?= h(app_name()) ?></h2>
+            <h2><?= h($loginHeading) ?></h2>
             <p class="auth-login-description">
               Sign in once with Google and the system will open the correct portal for your authorized account.
             </p>
             <p class="auth-login-campus">Sultan Kudarat State University</p>
-          </div>
-
-          <div class="auth-login-message auth-login-message-info">
-            <p><?= h($googleAccessMessage) ?></p>
           </div>
 
           <?php if ($noticeMessage !== null || $errorMessage !== null): ?>
@@ -129,6 +124,10 @@ $googleButtonCaption = $allowedDomain !== null
               </span>
             </button>
           <?php endif; ?>
+
+          <div class="auth-login-footer-note">
+            <p><?= h($googleAccessMessage) ?></p>
+          </div>
         </div>
       </div>
     </div>

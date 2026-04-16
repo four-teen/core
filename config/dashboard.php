@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 function dashboard_overview(PDO $pdo): array
 {
+    ensure_evaluation_subject_scope($pdo);
+
     $statement = $pdo->query(
         "SELECT
             (SELECT COUNT(*) FROM tbl_student_management) AS total_students,
@@ -10,9 +12,9 @@ function dashboard_overview(PDO $pdo): array
             (SELECT COUNT(*) FROM tbl_subject_masterlist WHERE status = 'active') AS active_subjects,
             (SELECT COUNT(*) FROM tbl_faculty WHERE status = 'active') AS active_faculty_master,
             (SELECT COUNT(DISTINCT faculty_id) FROM tbl_student_management_enrolled_subjects WHERE is_active = 1 AND faculty_id <> 0) AS active_faculty,
-            (SELECT COUNT(*) FROM tbl_student_faculty_evaluations WHERE submission_status = 'submitted') AS submitted_evaluations,
-            (SELECT COUNT(*) FROM tbl_student_faculty_evaluations WHERE submission_status = 'draft') AS draft_evaluations,
-            (SELECT COUNT(DISTINCT faculty_id) FROM tbl_student_faculty_evaluations WHERE submission_status = 'submitted' AND faculty_id <> 0) AS evaluated_faculty"
+            (SELECT COUNT(*) FROM tbl_student_faculty_evaluations WHERE submission_status = 'submitted' AND student_enrollment_id IS NOT NULL) AS submitted_evaluations,
+            (SELECT COUNT(*) FROM tbl_student_faculty_evaluations WHERE submission_status = 'draft' AND student_enrollment_id IS NOT NULL) AS draft_evaluations,
+            (SELECT COUNT(DISTINCT faculty_id) FROM tbl_student_faculty_evaluations WHERE submission_status = 'submitted' AND faculty_id <> 0 AND student_enrollment_id IS NOT NULL) AS evaluated_faculty"
     );
 
     return $statement->fetch() ?: [];
@@ -115,6 +117,8 @@ function dashboard_subject_sections(PDO $pdo): array
 
 function dashboard_recent_evaluations(PDO $pdo): array
 {
+    ensure_evaluation_subject_scope($pdo);
+
     $statement = $pdo->query(
         "SELECT
             ev.evaluation_id,
@@ -136,6 +140,7 @@ function dashboard_recent_evaluations(PDO $pdo): array
             ev.updated_at
         FROM tbl_student_faculty_evaluations ev
         LEFT JOIN tbl_faculty f ON f.faculty_id = ev.faculty_id
+        WHERE ev.student_enrollment_id IS NOT NULL
         ORDER BY ev.updated_at DESC, ev.evaluation_id DESC
         LIMIT 8"
     );

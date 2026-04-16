@@ -136,8 +136,138 @@ function evaluation_term_label($academicYearLabel, $semester): string
     return $academicYearLabel . ' | ' . format_semester($semester);
 }
 
+function ensure_evaluation_subject_scope(PDO $pdo): void
+{
+    static $ensured = false;
+
+    if ($ensured) {
+        return;
+    }
+
+    $columns = evaluation_table_columns($pdo);
+
+    if (!isset($columns['student_enrollment_id'])) {
+        $pdo->exec(
+            "ALTER TABLE tbl_student_faculty_evaluations
+             ADD COLUMN student_enrollment_id INT(10) UNSIGNED NULL AFTER student_id"
+        );
+    }
+
+    if (!isset($columns['subject_id'])) {
+        $pdo->exec(
+            "ALTER TABLE tbl_student_faculty_evaluations
+             ADD COLUMN subject_id INT(10) UNSIGNED NULL AFTER faculty_id"
+        );
+    }
+
+    if (!isset($columns['subject_code'])) {
+        $pdo->exec(
+            "ALTER TABLE tbl_student_faculty_evaluations
+             ADD COLUMN subject_code VARCHAR(50) NOT NULL DEFAULT '' AFTER subject_id"
+        );
+    }
+
+    $indexes = evaluation_table_indexes($pdo);
+    if (isset($indexes['uniq_student_faculty_term'])) {
+        $pdo->exec(
+            "ALTER TABLE tbl_student_faculty_evaluations
+             DROP INDEX uniq_student_faculty_term"
+        );
+    }
+
+    evaluation_backfill_single_subject_records($pdo);
+
+    $indexes = evaluation_table_indexes($pdo);
+    if (!isset($indexes['idx_eval_student_enrollment'])) {
+        $pdo->exec(
+            "ALTER TABLE tbl_student_faculty_evaluations
+             ADD INDEX idx_eval_student_enrollment (student_enrollment_id)"
+        );
+    }
+
+    if (
+        !isset($indexes['uniq_student_enrollment_evaluation'])
+        && !evaluation_has_duplicate_subject_scoped_records($pdo)
+    ) {
+        $pdo->exec(
+            "ALTER TABLE tbl_student_faculty_evaluations
+             ADD UNIQUE INDEX uniq_student_enrollment_evaluation (student_enrollment_id)"
+        );
+    }
+
+    $ensured = true;
+}
+
+function evaluation_table_columns(PDO $pdo): array
+{
+    $columns = [];
+    $statement = $pdo->query('SHOW COLUMNS FROM tbl_student_faculty_evaluations');
+
+    foreach ($statement->fetchAll() as $row) {
+        $columns[(string) $row['Field']] = true;
+    }
+
+    return $columns;
+}
+
+function evaluation_table_indexes(PDO $pdo): array
+{
+    $indexes = [];
+    $statement = $pdo->query('SHOW INDEX FROM tbl_student_faculty_evaluations');
+
+    foreach ($statement->fetchAll() as $row) {
+        $indexes[(string) $row['Key_name']] = true;
+    }
+
+    return $indexes;
+}
+
+function evaluation_has_duplicate_subject_scoped_records(PDO $pdo): bool
+{
+    $sql = "SELECT student_enrollment_id
+            FROM tbl_student_faculty_evaluations
+            WHERE student_enrollment_id IS NOT NULL
+            GROUP BY student_enrollment_id
+            HAVING COUNT(*) > 1
+            LIMIT 1";
+
+    $statement = $pdo->query($sql);
+
+    return (bool) $statement->fetch();
+}
+
+function evaluation_backfill_single_subject_records(PDO $pdo): void
+{
+    $sql = "UPDATE tbl_student_faculty_evaluations ev
+            INNER JOIN (
+                SELECT
+                    ev_inner.evaluation_id,
+                    MIN(es.student_enrollment_id) AS student_enrollment_id,
+                    MIN(es.subject_id) AS subject_id,
+                    MIN(es.subject_code) AS subject_code,
+                    COUNT(*) AS matched_subjects
+                FROM tbl_student_faculty_evaluations ev_inner
+                INNER JOIN tbl_student_management_enrolled_subjects es
+                    ON es.student_id = ev_inner.student_id
+                   AND es.faculty_id = ev_inner.faculty_id
+                   AND es.ay_id = ev_inner.ay_id
+                   AND es.semester = ev_inner.semester
+                   AND es.is_active = 1
+                WHERE ev_inner.student_enrollment_id IS NULL
+                GROUP BY ev_inner.evaluation_id
+                HAVING matched_subjects = 1
+            ) matched ON matched.evaluation_id = ev.evaluation_id
+            SET ev.student_enrollment_id = matched.student_enrollment_id,
+                ev.subject_id = matched.subject_id,
+                ev.subject_code = matched.subject_code";
+
+    $pdo->exec($sql);
+}
+
 function student_evaluation_context(PDO $pdo, int $studentId, int $enrollmentId): ?array
 {
+    ensure_evaluation_subject_scope($pdo);
+
     $sql = "SELECT
                 es.student_enrollment_id,
                 es.student_id,
@@ -195,65 +325,44 @@ function student_evaluation_context(PDO $pdo, int $studentId, int $enrollmentId)
         $context['suffix_name'] ?? ''
     );
     $context['term_label'] = evaluation_term_label($context['academic_year_label'], $context['semester']);
-    $context['subject_summary'] = evaluation_subject_summary(
-        $pdo,
-        $studentId,
-        (int) $context['faculty_id'],
-        (int) $context['ay_id'],
-        (int) $context['semester']
-    );
+    $context['subject_summary'] = evaluation_subject_summary($context);
 
     return $context;
 }
 
-function evaluation_subject_summary(PDO $pdo, int $studentId, int $facultyId, int $ayId, int $semester): string
+function evaluation_subject_summary(array $context): string
 {
-    $sql = "SELECT
-                es.subject_code,
-                COALESCE(smst.sub_description, es.descriptive_title) AS descriptive_title,
-                es.section_text
-            FROM tbl_student_management_enrolled_subjects es
-            LEFT JOIN tbl_subject_masterlist smst ON smst.sub_id = es.subject_id
-            WHERE es.student_id = :student_id
-              AND es.faculty_id = :faculty_id
-              AND es.ay_id = :ay_id
-              AND es.semester = :semester
-              AND es.is_active = 1
-            ORDER BY es.subject_code ASC, es.section_text ASC";
+    $parts = [];
 
-    $statement = $pdo->prepare($sql);
-    $statement->execute([
-        'student_id' => $studentId,
-        'faculty_id' => $facultyId,
-        'ay_id' => $ayId,
-        'semester' => $semester,
-    ]);
-
-    $items = [];
-    foreach ($statement->fetchAll() as $row) {
-        $items[] = trim((string) $row['subject_code']) . ' - ' . trim((string) $row['descriptive_title']) . ' (' . trim((string) $row['section_text']) . ')';
+    if (trim((string) ($context['subject_code'] ?? '')) !== '') {
+        $parts[] = trim((string) $context['subject_code']);
     }
 
-    return implode('; ', $items);
+    if (trim((string) ($context['descriptive_title'] ?? '')) !== '') {
+        $parts[] = trim((string) $context['descriptive_title']);
+    }
+
+    $summary = implode(' - ', $parts);
+    $section = trim((string) ($context['section_text'] ?? ''));
+
+    if ($section !== '') {
+        $summary .= ' (' . $section . ')';
+    }
+
+    return $summary !== '' ? $summary : 'Subject #' . (string) ((int) ($context['subject_id'] ?? 0));
 }
 
-function find_evaluation_by_context(PDO $pdo, int $studentId, int $facultyId, int $ayId, int $semester): ?array
+function find_evaluation_by_context(PDO $pdo, int $studentEnrollmentId): ?array
 {
+    ensure_evaluation_subject_scope($pdo);
+
     $sql = "SELECT *
             FROM tbl_student_faculty_evaluations
-            WHERE student_id = :student_id
-              AND faculty_id = :faculty_id
-              AND ay_id = :ay_id
-              AND semester = :semester
+            WHERE student_enrollment_id = :student_enrollment_id
             LIMIT 1";
 
     $statement = $pdo->prepare($sql);
-    $statement->execute([
-        'student_id' => $studentId,
-        'faculty_id' => $facultyId,
-        'ay_id' => $ayId,
-        'semester' => $semester,
-    ]);
+    $statement->execute(['student_enrollment_id' => $studentEnrollmentId]);
 
     $evaluation = $statement->fetch();
     return $evaluation ?: null;
@@ -279,13 +388,9 @@ function find_evaluation_answers(PDO $pdo, int $evaluationId): array
 
 function create_or_get_evaluation(PDO $pdo, array $context): array
 {
-    $existing = find_evaluation_by_context(
-        $pdo,
-        (int) $context['student_id'],
-        (int) $context['faculty_id'],
-        (int) $context['ay_id'],
-        (int) $context['semester']
-    );
+    ensure_evaluation_subject_scope($pdo);
+
+    $existing = find_evaluation_by_context($pdo, (int) $context['student_enrollment_id']);
 
     if ($existing !== null) {
         return $existing;
@@ -293,7 +398,10 @@ function create_or_get_evaluation(PDO $pdo, array $context): array
 
     $sql = "INSERT INTO tbl_student_faculty_evaluations (
                 student_id,
+                student_enrollment_id,
                 faculty_id,
+                subject_id,
+                subject_code,
                 ay_id,
                 semester,
                 faculty_name,
@@ -309,7 +417,10 @@ function create_or_get_evaluation(PDO $pdo, array $context): array
                 final_submission_token
             ) VALUES (
                 :student_id,
+                :student_enrollment_id,
                 :faculty_id,
+                :subject_id,
+                :subject_code,
                 :ay_id,
                 :semester,
                 :faculty_name,
@@ -328,7 +439,10 @@ function create_or_get_evaluation(PDO $pdo, array $context): array
     $statement = $pdo->prepare($sql);
     $statement->execute([
         'student_id' => $context['student_id'],
+        'student_enrollment_id' => $context['student_enrollment_id'],
         'faculty_id' => $context['faculty_id'],
+        'subject_id' => $context['subject_id'],
+        'subject_code' => $context['subject_code'],
         'ay_id' => $context['ay_id'],
         'semester' => $context['semester'],
         'faculty_name' => $context['faculty_name'],
@@ -339,13 +453,7 @@ function create_or_get_evaluation(PDO $pdo, array $context): array
     ]);
 
     $evaluationId = (int) $pdo->lastInsertId();
-    $created = find_evaluation_by_context(
-        $pdo,
-        (int) $context['student_id'],
-        (int) $context['faculty_id'],
-        (int) $context['ay_id'],
-        (int) $context['semester']
-    );
+    $created = find_evaluation_by_context($pdo, (int) $context['student_enrollment_id']);
 
     if ($created === null) {
         throw new RuntimeException('Unable to create the evaluation record.');
@@ -354,7 +462,7 @@ function create_or_get_evaluation(PDO $pdo, array $context): array
     return $created;
 }
 
-function normalize_evaluation_answers(array $submittedAnswers): array
+function normalize_evaluation_answers(array $submittedAnswers, bool $requireComplete = true): array
 {
     $normalized = [];
     $validScores = array_keys(evaluation_scale_options());
@@ -363,7 +471,14 @@ function normalize_evaluation_answers(array $submittedAnswers): array
         $position = 1;
         foreach ($category['questions'] as $questionText) {
             $questionKey = evaluation_question_key($category, $position);
-            $rating = isset($submittedAnswers[$questionKey]) ? (int) $submittedAnswers[$questionKey] : 0;
+            $hasSubmittedRating = isset($submittedAnswers[$questionKey]) && trim((string) $submittedAnswers[$questionKey]) !== '';
+            $rating = $hasSubmittedRating ? (int) $submittedAnswers[$questionKey] : 0;
+
+            if (!$hasSubmittedRating && !$requireComplete) {
+                $position++;
+                continue;
+            }
+
             if (!in_array($rating, $validScores, true)) {
                 throw new RuntimeException('Please provide a rating for every evaluation item.');
             }
@@ -383,9 +498,55 @@ function normalize_evaluation_answers(array $submittedAnswers): array
     return $normalized;
 }
 
+function evaluation_has_any_answer(array $submittedAnswers): bool
+{
+    foreach (evaluation_question_bank() as $category) {
+        $position = 1;
+        foreach ($category['questions'] as $questionText) {
+            $questionKey = evaluation_question_key($category, $position);
+
+            if (isset($submittedAnswers[$questionKey]) && trim((string) $submittedAnswers[$questionKey]) !== '') {
+                return true;
+            }
+
+            $position++;
+        }
+    }
+
+    return false;
+}
+
+function evaluation_submitted_answer_values(array $submittedAnswers): array
+{
+    $answers = [];
+    $validScores = array_keys(evaluation_scale_options());
+
+    foreach (evaluation_question_bank() as $category) {
+        $position = 1;
+        foreach ($category['questions'] as $questionText) {
+            $questionKey = evaluation_question_key($category, $position);
+
+            if (isset($submittedAnswers[$questionKey])) {
+                $rating = (int) $submittedAnswers[$questionKey];
+
+                if (in_array($rating, $validScores, true)) {
+                    $answers[$questionKey] = $rating;
+                }
+            }
+
+            $position++;
+        }
+    }
+
+    return $answers;
+}
+
 function save_evaluation_submission(PDO $pdo, array $evaluation, array $context, array $submittedAnswers, string $commentText, string $status): array
 {
-    $normalizedAnswers = normalize_evaluation_answers($submittedAnswers);
+    ensure_evaluation_subject_scope($pdo);
+
+    $isSubmitted = $status === 'submitted';
+    $normalizedAnswers = normalize_evaluation_answers($submittedAnswers, $isSubmitted);
     $totalScore = 0;
     foreach ($normalizedAnswers as $answer) {
         $totalScore += (int) $answer['rating'];
@@ -393,13 +554,15 @@ function save_evaluation_submission(PDO $pdo, array $evaluation, array $context,
 
     $questionCount = count($normalizedAnswers);
     $averageRating = $questionCount > 0 ? round($totalScore / $questionCount, 2) : 0;
-    $isSubmitted = $status === 'submitted';
 
     $pdo->beginTransaction();
 
     try {
         $updateSql = "UPDATE tbl_student_faculty_evaluations
                       SET faculty_name = :faculty_name,
+                          student_enrollment_id = :student_enrollment_id,
+                          subject_id = :subject_id,
+                          subject_code = :subject_code,
                           student_number = :student_number,
                           term_label = :term_label,
                           subject_summary = :subject_summary,
@@ -417,6 +580,9 @@ function save_evaluation_submission(PDO $pdo, array $evaluation, array $context,
         $updateStatement = $pdo->prepare($updateSql);
         $updateStatement->execute([
             'faculty_name' => $context['faculty_name'],
+            'student_enrollment_id' => $context['student_enrollment_id'],
+            'subject_id' => $context['subject_id'],
+            'subject_code' => $context['subject_code'],
             'student_number' => $context['student_number'],
             'term_label' => $context['term_label'],
             'subject_summary' => $context['subject_summary'],
@@ -473,13 +639,7 @@ function save_evaluation_submission(PDO $pdo, array $evaluation, array $context,
         throw $exception;
     }
 
-    $saved = find_evaluation_by_context(
-        $pdo,
-        (int) $context['student_id'],
-        (int) $context['faculty_id'],
-        (int) $context['ay_id'],
-        (int) $context['semester']
-    );
+    $saved = find_evaluation_by_context($pdo, (int) $context['student_enrollment_id']);
 
     if ($saved === null) {
         throw new RuntimeException('Unable to reload the saved evaluation.');

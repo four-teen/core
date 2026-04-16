@@ -15,8 +15,8 @@ function is_student_authenticated(): bool
 function require_student_authentication(): void
 {
     if (!is_student_authenticated()) {
-        flash('error', 'Please sign in with your enrolled student email.');
-        redirect_to('student/login.php');
+        flash('error', 'Please sign in with Google to open the student portal.');
+        redirect_to('auth/login.php');
     }
 }
 
