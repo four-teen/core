@@ -111,6 +111,69 @@ function student_profile_record(PDO $pdo, int $studentId): ?array
     return $student;
 }
 
+function student_profile_update(PDO $pdo, int $studentId, array $payload): void
+{
+    $existingStudent = student_profile_record($pdo, $studentId);
+
+    if ($existingStudent === null) {
+        throw new RuntimeException('The selected student could not be found.');
+    }
+
+    $firstName = preg_replace('/\s+/', ' ', trim((string) ($payload['first_name'] ?? ''))) ?? '';
+    $middleName = preg_replace('/\s+/', ' ', trim((string) ($payload['middle_name'] ?? ''))) ?? '';
+    $lastName = preg_replace('/\s+/', ' ', trim((string) ($payload['last_name'] ?? ''))) ?? '';
+    $suffixName = preg_replace('/\s+/', ' ', trim((string) ($payload['suffix_name'] ?? ''))) ?? '';
+    $emailAddress = user_management_normalize_email((string) ($payload['email_address'] ?? ''));
+
+    if ($firstName === '') {
+        throw new RuntimeException('Please enter the student first name.');
+    }
+
+    if ($lastName === '') {
+        throw new RuntimeException('Please enter the student last name.');
+    }
+
+    if ($emailAddress === '' || filter_var($emailAddress, FILTER_VALIDATE_EMAIL) === false) {
+        throw new RuntimeException('Please enter a valid student email address.');
+    }
+
+    $duplicateStatement = $pdo->prepare(
+        "SELECT student_id
+           FROM tbl_student_management
+          WHERE LOWER(email_address) = LOWER(:email_address)
+            AND student_id <> :student_id
+          LIMIT 1"
+    );
+    $duplicateStatement->execute([
+        'email_address' => $emailAddress,
+        'student_id' => $studentId,
+    ]);
+
+    if ($duplicateStatement->fetch()) {
+        throw new RuntimeException('That email address is already assigned to another student record.');
+    }
+
+    $statement = $pdo->prepare(
+        "UPDATE tbl_student_management
+            SET first_name = :first_name,
+                middle_name = :middle_name,
+                last_name = :last_name,
+                suffix_name = :suffix_name,
+                email_address = :email_address,
+                updated_at = NOW()
+          WHERE student_id = :student_id
+          LIMIT 1"
+    );
+    $statement->execute([
+        'first_name' => $firstName,
+        'middle_name' => $middleName,
+        'last_name' => $lastName,
+        'suffix_name' => $suffixName,
+        'email_address' => $emailAddress,
+        'student_id' => $studentId,
+    ]);
+}
+
 function student_portal_qr_payload(array $student): string
 {
     $studentNumber = preg_replace('/[^A-Za-z0-9._-]/', '', trim((string) ($student['student_number'] ?? '')));

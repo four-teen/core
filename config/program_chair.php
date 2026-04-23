@@ -93,6 +93,7 @@ function ensure_program_chair_tables(PDO $pdo): void
         "CREATE TABLE IF NOT EXISTS tbl_program_chair_faculty (
             program_chair_faculty_id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             faculty_id INT UNSIGNED NOT NULL,
+            faculty_classification VARCHAR(40) NOT NULL DEFAULT '',
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             created_by_user_management_id INT UNSIGNED NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -101,6 +102,7 @@ function ensure_program_chair_tables(PDO $pdo): void
             KEY idx_program_chair_faculty_active (is_active)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+    program_chair_ensure_faculty_columns($pdo);
 
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS tbl_program_chair_faculty_evaluations (
@@ -152,6 +154,45 @@ function ensure_program_chair_tables(PDO $pdo): void
     $initialized = true;
 }
 
+function program_chair_faculty_classification_options(): array
+{
+    return [
+        'REGULAR' => 'Regular Faculty',
+        'CONTRACT OF SERVICE' => 'Contract of Service Faculty',
+    ];
+}
+
+function program_chair_normalize_faculty_classification(string $classification, bool $allowEmpty = false): string
+{
+    $normalized = strtoupper(trim(preg_replace('/\s+/', ' ', $classification) ?? ''));
+
+    if ($normalized === 'REGULAR FACULTY') {
+        $normalized = 'REGULAR';
+    }
+
+    if ($normalized === 'CONTRACT OF SERVICE FACULTY') {
+        $normalized = 'CONTRACT OF SERVICE';
+    }
+
+    if ($normalized === '' && $allowEmpty) {
+        return '';
+    }
+
+    if (!array_key_exists($normalized, program_chair_faculty_classification_options())) {
+        throw new RuntimeException('Please select a valid faculty classification.');
+    }
+
+    return $normalized;
+}
+
+function program_chair_faculty_classification_label(string $classification): string
+{
+    $normalized = program_chair_normalize_faculty_classification($classification, true);
+    $options = program_chair_faculty_classification_options();
+
+    return $options[$normalized] ?? 'Not set';
+}
+
 function program_chair_table_columns(PDO $pdo, string $tableName): array
 {
     $columns = [];
@@ -162,6 +203,19 @@ function program_chair_table_columns(PDO $pdo, string $tableName): array
     }
 
     return $columns;
+}
+
+function program_chair_ensure_faculty_columns(PDO $pdo): void
+{
+    $columns = program_chair_table_columns($pdo, 'tbl_program_chair_faculty');
+
+    if (!isset($columns['faculty_classification'])) {
+        program_chair_add_column_if_missing(
+            $pdo,
+            "ALTER TABLE tbl_program_chair_faculty
+             ADD COLUMN faculty_classification VARCHAR(40) NOT NULL DEFAULT '' AFTER faculty_id"
+        );
+    }
 }
 
 function program_chair_ensure_evaluation_subject_columns(PDO $pdo): void
@@ -399,6 +453,7 @@ function program_chair_selected_faculty_list(PDO $pdo): array
         "SELECT
             pcf.program_chair_faculty_id,
             pcf.faculty_id,
+            pcf.faculty_classification,
             pcf.is_active,
             pcf.created_at,
             pcf.updated_at,
@@ -419,6 +474,7 @@ function program_chair_selected_faculty_list(PDO $pdo): array
          GROUP BY
             pcf.program_chair_faculty_id,
             pcf.faculty_id,
+            pcf.faculty_classification,
             pcf.is_active,
             pcf.created_at,
             pcf.updated_at,
@@ -438,13 +494,15 @@ function program_chair_selected_faculty_list(PDO $pdo): array
     return $rows;
 }
 
-function program_chair_faculty_add(PDO $pdo, int $facultyId, int $createdByUserId): void
+function program_chair_faculty_add(PDO $pdo, int $facultyId, string $classification, int $createdByUserId): void
 {
     ensure_program_chair_tables($pdo);
 
     if ($facultyId <= 0) {
         throw new RuntimeException('Please select a valid faculty member.');
     }
+
+    $classification = program_chair_normalize_faculty_classification($classification);
 
     $statement = $pdo->prepare(
         "SELECT faculty_id
@@ -462,21 +520,47 @@ function program_chair_faculty_add(PDO $pdo, int $facultyId, int $createdByUserI
     $insertStatement = $pdo->prepare(
         "INSERT INTO tbl_program_chair_faculty (
             faculty_id,
+            faculty_classification,
             is_active,
             created_by_user_management_id
          ) VALUES (
             :faculty_id,
+            :faculty_classification,
             1,
             :created_by_user_management_id
          )
          ON DUPLICATE KEY UPDATE
+            faculty_classification = VALUES(faculty_classification),
             is_active = 1,
             created_by_user_management_id = VALUES(created_by_user_management_id),
             updated_at = NOW()"
     );
     $insertStatement->execute([
         'faculty_id' => $facultyId,
+        'faculty_classification' => $classification,
         'created_by_user_management_id' => $createdByUserId > 0 ? $createdByUserId : null,
+    ]);
+}
+
+function program_chair_faculty_update_classification(PDO $pdo, int $programChairFacultyId, string $classification): void
+{
+    ensure_program_chair_tables($pdo);
+
+    if ($programChairFacultyId <= 0) {
+        throw new RuntimeException('Please select a valid program chair faculty list row.');
+    }
+
+    $classification = program_chair_normalize_faculty_classification($classification);
+
+    $statement = $pdo->prepare(
+        "UPDATE tbl_program_chair_faculty
+         SET faculty_classification = :faculty_classification,
+             updated_at = NOW()
+         WHERE program_chair_faculty_id = :program_chair_faculty_id"
+    );
+    $statement->execute([
+        'faculty_classification' => $classification,
+        'program_chair_faculty_id' => $programChairFacultyId,
     ]);
 }
 

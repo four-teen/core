@@ -162,6 +162,13 @@ require __DIR__ . '/_start.php';
         <p class="mb-0 text-muted"><?= h((string) $report['term_scope']['note']) ?></p>
       </div>
       <div class="d-flex flex-wrap gap-2">
+        <a
+          href="<?= h(base_url('administrator/consolidated_faculty_performance.php' . ($selectedTermKey !== '' ? '?term_key=' . rawurlencode($selectedTermKey) : ''))) ?>"
+          class="btn btn-outline-primary"
+        >
+          <i class="bx bx-table me-1"></i>
+          Consolidated Report
+        </a>
         <button type="button" class="btn btn-primary" onclick="window.print()">
           <i class="bx bx-printer me-1"></i>
           Print Report
@@ -354,6 +361,15 @@ require __DIR__ . '/_start.php';
     const paper = document.querySelector('.ifpe-paper');
     const content = paper ? paper.querySelector('.ifpe-paper-content') : null;
     const sourceLetterhead = paper ? paper.querySelector('.ifpe-letterhead') : null;
+    const pageCandidateSelector = [
+      '.ifpe-title',
+      '.ifpe-term-line',
+      '.ifpe-faculty-line',
+      '.ifpe-official-table',
+      '.ifpe-comments-block h2',
+      '.ifpe-comments-list > li',
+      '.ifpe-signature-block'
+    ].join(', ');
 
     if (!paper || !content || !sourceLetterhead) {
       return;
@@ -377,21 +393,84 @@ require __DIR__ . '/_start.php';
       });
     };
 
+    const removePageSpacers = () => {
+      content.querySelectorAll('.ifpe-page-spacer').forEach((spacer) => {
+        spacer.remove();
+      });
+    };
+
+    const relativeTop = (element) => element.getBoundingClientRect().top - paper.getBoundingClientRect().top;
+
+    const insertPageSpacers = (pageHeight, paddingTop, paddingBottom) => {
+      const safeContentHeight = Math.max(1, pageHeight - paddingTop - paddingBottom);
+      const maxPasses = 40;
+      const tolerance = 1.5;
+
+      for (let pass = 0; pass < maxPasses; pass += 1) {
+        let inserted = false;
+        const candidates = Array.from(content.querySelectorAll(pageCandidateSelector));
+
+        for (const candidate of candidates) {
+          if (candidate.classList.contains('ifpe-page-spacer')) {
+            continue;
+          }
+
+          const candidateHeight = candidate.getBoundingClientRect().height;
+          if (candidateHeight <= 0 || candidateHeight >= safeContentHeight - tolerance) {
+            continue;
+          }
+
+          const top = relativeTop(candidate);
+          const bottom = top + candidateHeight;
+          const pageIndex = Math.max(0, Math.floor(top / pageHeight));
+          const pageSafeTop = (pageIndex * pageHeight) + paddingTop;
+          const pageSafeBottom = ((pageIndex + 1) * pageHeight) - paddingBottom;
+          let spacerHeight = 0;
+
+          if (pageIndex > 0 && top < pageSafeTop - tolerance) {
+            spacerHeight = pageSafeTop - top;
+          } else if (top >= pageSafeTop - tolerance && bottom > pageSafeBottom + tolerance) {
+            spacerHeight = (((pageIndex + 1) * pageHeight) + paddingTop) - top;
+          }
+
+          if (spacerHeight <= tolerance || !candidate.parentNode) {
+            continue;
+          }
+
+          const spacer = document.createElement('div');
+          spacer.className = 'ifpe-page-spacer';
+          spacer.setAttribute('aria-hidden', 'true');
+          spacer.style.height = `${spacerHeight}px`;
+          candidate.parentNode.insertBefore(spacer, candidate);
+          inserted = true;
+          break;
+        }
+
+        if (!inserted) {
+          break;
+        }
+      }
+    };
+
     const applyPageLayout = () => {
       syncFrame = 0;
       removeRepeatedLetterheads();
+      removePageSpacers();
       paper.style.setProperty('--ifpe-print-height', '297mm');
 
       const pageHeight = measureA4PageHeight();
       const contentStyle = window.getComputedStyle(content);
       const paddingTop = parseFloat(contentStyle.paddingTop) || 0;
       const paddingBottom = parseFloat(contentStyle.paddingBottom) || 0;
-      const usablePageHeight = Math.max(1, pageHeight - paddingTop - paddingBottom);
-      const contentHeight = Math.max(0, content.scrollHeight - paddingTop - paddingBottom);
       const pageTolerance = 12;
-      const pageCount = contentHeight <= usablePageHeight + pageTolerance
-        ? 1
-        : Math.max(1, Math.ceil((contentHeight - pageTolerance) / usablePageHeight));
+
+      insertPageSpacers(pageHeight, paddingTop, paddingBottom);
+
+      const contentHeight = Math.max(
+        content.scrollHeight,
+        content.getBoundingClientRect().height
+      );
+      const pageCount = Math.max(1, Math.ceil((contentHeight + pageTolerance) / pageHeight));
 
       paper.style.setProperty('--ifpe-print-height', `${pageCount * 297}mm`);
 
@@ -399,7 +478,7 @@ require __DIR__ . '/_start.php';
         const letterhead = sourceLetterhead.cloneNode(true);
         letterhead.classList.add('ifpe-letterhead-repeat');
         letterhead.setAttribute('aria-hidden', 'true');
-        letterhead.style.top = `calc(${pageIndex} * 297mm + 9mm)`;
+        letterhead.style.top = `calc(${pageIndex} * 297mm + var(--ifpe-letterhead-top, 9mm))`;
         paper.appendChild(letterhead);
       }
     };

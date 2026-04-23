@@ -710,6 +710,15 @@
   pointer-events: none;
 }
 
+.program-chair-admin-fragment {
+  transition: opacity 0.18s ease;
+}
+
+.program-chair-admin-fragment.is-loading {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 .program-chair-faculty-card {
   border: 1px solid #d9dee8;
   border-radius: 0.5rem;
@@ -876,6 +885,8 @@
 }
 
 .ifpe-paper {
+  --ifpe-letterhead-top: 9mm;
+  --ifpe-content-top: 43.8mm;
   box-sizing: border-box;
   width: 210mm;
   height: auto;
@@ -897,7 +908,7 @@
 
 .ifpe-letterhead {
   position: absolute;
-  top: 9mm;
+  top: var(--ifpe-letterhead-top);
   right: 8mm;
   left: 19mm;
   z-index: 2;
@@ -966,7 +977,7 @@
 .ifpe-paper-content {
   position: relative;
   z-index: 1;
-  padding: 47.8mm 7mm 16mm 24mm;
+  padding: var(--ifpe-content-top) 7mm 16mm 24mm;
   font-size: 10pt;
   line-height: 1.22;
   -webkit-box-decoration-break: clone;
@@ -985,7 +996,7 @@
 }
 
 .ifpe-term-line {
-  margin: 0 0 13.5mm;
+  margin: 0 0 8.5mm;
   color: #111;
   font-size: 9.8pt;
   font-weight: 700;
@@ -1028,6 +1039,8 @@
   border-collapse: collapse;
   background: transparent;
   color: #111;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .ifpe-official-table th,
@@ -1135,6 +1148,8 @@
   font-family: Arial, Helvetica, sans-serif;
   font-size: 10pt;
   font-weight: 700;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .ifpe-comments-block h2 em {
@@ -1158,6 +1173,8 @@
   color: #111;
   font-size: 8.8pt;
   line-height: 1.25;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .ifpe-comment-source {
@@ -1235,6 +1252,366 @@
   font-weight: 400;
   line-height: 1.2;
   text-align: center;
+}
+
+.cfpe-print-shell {
+  overflow-x: auto;
+  padding: 0 0 2rem;
+}
+
+.cfpe-paper {
+  --cfpe-header-top: 0mm;
+  --cfpe-content-top: 81mm;
+  box-sizing: border-box;
+  width: 210mm;
+  height: auto;
+  min-height: var(--cfpe-print-height, 297mm);
+  position: relative;
+  margin: 0 auto;
+  overflow: visible;
+  background-color: #fff;
+  background-image: var(--cfpe-template-image);
+  background-repeat: repeat-y;
+  background-position: top left;
+  background-size: 210mm 297mm;
+  color: #111;
+  font-family: Arial, Helvetica, sans-serif;
+  box-shadow: 0 1.4rem 3rem rgba(31, 50, 84, 0.16);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.cfpe-page-header {
+  position: absolute;
+  top: var(--cfpe-header-top);
+  right: 8mm;
+  left: 15mm;
+  z-index: 2;
+  color: #111;
+}
+
+.cfpe-letterhead {
+  display: grid;
+  grid-template-columns: 22mm 18mm minmax(0, 1fr) 36mm;
+  align-items: center;
+  gap: 2.2mm;
+  height: 25mm;
+  padding-top: 8mm;
+  color: #9ca7a0;
+}
+
+.cfpe-letterhead-bagong {
+  width: 20mm;
+  max-height: 18mm;
+  object-fit: contain;
+  transform: translateX(-4mm);
+}
+
+.cfpe-letterhead-seal {
+  width: 17.5mm;
+  height: 17.5mm;
+  object-fit: contain;
+  transform: translateX(-4mm);
+}
+
+.cfpe-letterhead-copy {
+  min-width: 0;
+  line-height: 1.05;
+}
+
+.cfpe-letterhead-copy div {
+  color: #a8afa9;
+  font-size: 7.6pt;
+}
+
+.cfpe-letterhead-copy strong {
+  display: block;
+  color: #93b89b;
+  font-size: 9.8pt;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+}
+
+.cfpe-letterhead-copy em {
+  display: block;
+  color: #9fa7a1;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 8pt;
+  line-height: 1.06;
+}
+
+.cfpe-letterhead-code {
+  align-self: end;
+  padding-bottom: 2mm;
+  color: #9da5a1;
+  font-size: 7.2pt;
+  line-height: 1.18;
+}
+
+.cfpe-letterhead-code span {
+  display: block;
+}
+
+.cfpe-values-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35mm 1.2mm;
+  margin: 4mm 0 2.2mm 10mm;
+  color: #4f5d4d;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 5.45pt;
+  line-height: 1.22;
+}
+
+.cfpe-values-label {
+  font-family: Arial, Helvetica, sans-serif;
+  font-weight: 700;
+}
+
+.cfpe-title {
+  margin: 0 0 0.8mm;
+  color: #111;
+  font-size: 10.6pt;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.cfpe-term-line,
+.cfpe-campus-line {
+  margin: 0;
+  color: #111;
+  font-size: 9.6pt;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.cfpe-campus-line {
+  margin-bottom: 4.2mm;
+}
+
+.cfpe-table-header,
+.cfpe-data-row {
+  display: grid;
+  grid-template-columns: 12mm minmax(0, 1fr) 31mm 31mm 28mm;
+}
+
+.cfpe-table-header {
+  grid-template-rows: 6.5mm 6.2mm;
+  border: 1px solid #111;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.cfpe-table-header > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.85mm 1mm;
+  border-right: 1px solid #111;
+  border-bottom: 1px solid #111;
+  color: #111;
+  font-size: 6.6pt;
+  font-weight: 700;
+  line-height: 1.16;
+  text-align: center;
+}
+
+.cfpe-table-header > div:last-child {
+  border-right: 0;
+}
+
+.cfpe-header-no {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.cfpe-header-name {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.cfpe-header-rating {
+  grid-column: 3 / span 3;
+  grid-row: 1;
+}
+
+.cfpe-header-student {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.cfpe-header-supervisor {
+  grid-column: 4;
+  grid-row: 2;
+}
+
+.cfpe-header-total {
+  grid-column: 5;
+  grid-row: 2;
+  border-right: 0 !important;
+}
+
+.cfpe-header-no,
+.cfpe-header-name {
+  border-bottom: 0 !important;
+}
+
+.cfpe-header-rating {
+  border-right: 0 !important;
+}
+
+.cfpe-paper-content {
+  position: relative;
+  z-index: 1;
+  padding: var(--cfpe-content-top) 9mm 16mm 25mm;
+  color: #111;
+  font-size: 9pt;
+  line-height: 1.2;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.cfpe-section-row {
+  display: block;
+  padding: 1.1mm 2.2mm;
+  border-right: 1px solid #111;
+  border-bottom: 1px solid #111;
+  border-left: 1px solid #111;
+  background: #d8ebca;
+  color: #111;
+  font-size: 8pt;
+  font-weight: 700;
+  line-height: 1.15;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.cfpe-data-row {
+  min-height: 5.2mm;
+  color: #111;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.cfpe-data-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.9mm 1.2mm;
+  border-right: 1px solid #111;
+  border-bottom: 1px solid #111;
+  background: rgba(255, 255, 255, 0.97);
+  color: #111;
+  font-size: 7.5pt;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.cfpe-data-cell:last-child {
+  border-right: 1px solid #111;
+}
+
+.cfpe-data-cell:first-child {
+  border-left: 1px solid #111;
+}
+
+.cfpe-col-no {
+  justify-content: flex-start;
+  padding-left: 2mm;
+  font-weight: 700;
+}
+
+.cfpe-col-name {
+  justify-content: flex-start;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.cfpe-col-score {
+  font-weight: 700;
+}
+
+.cfpe-col-total {
+  background: #f5f7d8;
+}
+
+.cfpe-data-row-empty .cfpe-col-name {
+  text-transform: none;
+  font-style: italic;
+}
+
+.cfpe-signature-stack {
+  width: 88mm;
+  margin: 9mm 0 0 0;
+  color: #111;
+}
+
+.cfpe-signature-block {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.cfpe-signature-block + .cfpe-signature-block {
+  margin-top: 10mm;
+}
+
+.cfpe-signature-block p {
+  margin: 0 0 8mm;
+  color: #111;
+  font-size: 9.5pt;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.cfpe-signature-line {
+  width: 78mm;
+  height: 1px;
+  border-bottom: 1px solid #111;
+}
+
+.cfpe-signature-line-short {
+  width: 36mm;
+}
+
+.cfpe-signature-line-medium {
+  width: 46mm;
+}
+
+.cfpe-signature-line-long {
+  width: 63mm;
+}
+
+.cfpe-signature-block span {
+  display: block;
+  margin-top: 0.8mm;
+  color: #111;
+  font-size: 9.2pt;
+  line-height: 1.2;
+}
+
+.cfpe-page-spacer {
+  display: block;
+  width: 100%;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  pointer-events: none;
+  background: transparent;
+}
+
+.ifpe-page-spacer {
+  display: block;
+  width: 100%;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  pointer-events: none;
+  background: transparent;
 }
 
 @media (max-width: 1199.98px) {
@@ -1548,6 +1925,7 @@
   .navbar-nav-right,
   .admin-navbar-actions,
   .ifpe-screen-controls,
+  .cfpe-screen-controls,
   .content-backdrop {
     display: none !important;
     visibility: hidden !important;
@@ -1580,6 +1958,8 @@
   }
 
   .ifpe-paper {
+    --ifpe-letterhead-top: 2mm;
+    --ifpe-content-top: 36.8mm;
     width: 210mm !important;
     height: auto !important;
     min-height: var(--ifpe-print-height, 297mm) !important;
@@ -1599,6 +1979,39 @@
   }
 
   .ifpe-paper-content {
-    padding: 47.8mm 7mm 16mm 24mm !important;
+    padding: var(--ifpe-content-top) 7mm 16mm 24mm !important;
+  }
+
+  .cfpe-print-shell {
+    width: 210mm !important;
+    min-height: var(--cfpe-print-height, 297mm) !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .cfpe-paper {
+    --cfpe-content-top: 75mm;
+    width: 210mm !important;
+    height: auto !important;
+    min-height: var(--cfpe-print-height, 297mm) !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    background-image: var(--cfpe-template-image) !important;
+    background-position: top left !important;
+    background-repeat: repeat-y !important;
+    background-size: 210mm 297mm !important;
+    box-shadow: none !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  .cfpe-page-header {
+    display: block !important;
+  }
+
+  .cfpe-paper-content {
+    padding: var(--cfpe-content-top) 9mm 16mm 14mm 25mm !important;
   }
 }

@@ -111,6 +111,12 @@ if (!isset($activeAdminPage)) {
                 <div>Individual Faculty Performance</div>
               </a>
             </li>
+            <li class="menu-item <?= $activeAdminPage === 'consolidated_faculty_performance' ? 'active' : '' ?>">
+              <a href="<?= h(base_url('administrator/consolidated_faculty_performance.php')) ?>" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-table"></i>
+                <div>Consolidated Faculty Performance</div>
+              </a>
+            </li>
           </ul>
         </aside>
 
