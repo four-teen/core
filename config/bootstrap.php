@@ -46,3 +46,4 @@ require_once __DIR__ . '/dashboard.php';
 require_once __DIR__ . '/student_portal.php';
 require_once __DIR__ . '/evaluation.php';
 require_once __DIR__ . '/program_chair.php';
+require_once __DIR__ . '/individual_faculty_performance.php';

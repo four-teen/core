@@ -42,7 +42,7 @@ if (!isset($activeAdminPage)) {
     <link rel="stylesheet" href="../assets/vendor/css/theme-default.css" class="template-customizer-theme-css" />
     <link rel="stylesheet" href="../assets/css/demo.css" />
     <link rel="stylesheet" href="../assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css" />
-    <link rel="stylesheet" href="../assets/css/app.css" />
+    <link rel="stylesheet" href="<?= h(asset_url('assets/css/app.css')) ?>" />
     <script src="../assets/vendor/js/helpers.js"></script>
     <script src="../assets/js/config.js"></script>
   </head>
@@ -103,6 +103,12 @@ if (!isset($activeAdminPage)) {
               <a href="<?= h(base_url('administrator/evaluations.php')) ?>" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-time-five"></i>
                 <div>Recent Evaluation Activity</div>
+              </a>
+            </li>
+            <li class="menu-item <?= $activeAdminPage === 'individual_faculty_performance' ? 'active' : '' ?>">
+              <a href="<?= h(base_url('administrator/individual_faculty_performance.php')) ?>" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-file"></i>
+                <div>Individual Faculty Performance</div>
               </a>
             </li>
           </ul>

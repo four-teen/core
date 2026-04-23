@@ -870,6 +870,330 @@
   outline-offset: 2px;
 }
 
+.ifpe-print-shell {
+  overflow-x: auto;
+  padding: 0 0 2rem;
+}
+
+.ifpe-paper {
+  box-sizing: border-box;
+  width: 210mm;
+  height: 297mm;
+  min-height: 0;
+  position: relative;
+  margin: 0 auto;
+  overflow: hidden;
+  background-color: #fff;
+  background-image: var(--ifpe-template-image);
+  background-repeat: no-repeat;
+  background-position: top left;
+  background-size: 100% 100%;
+  color: #111;
+  font-family: Arial, Helvetica, sans-serif;
+  box-shadow: 0 1.4rem 3rem rgba(31, 50, 84, 0.16);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.ifpe-letterhead {
+  position: absolute;
+  top: 9mm;
+  right: 8mm;
+  left: 19mm;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 22mm 18mm minmax(0, 1fr) 36mm;
+  align-items: center;
+  gap: 2.2mm;
+  height: 25mm;
+  color: #9ca7a0;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.ifpe-letterhead-bagong {
+  width: 20mm;
+  max-height: 18mm;
+  object-fit: contain;
+}
+
+.ifpe-letterhead-seal {
+  width: 17.5mm;
+  height: 17.5mm;
+  object-fit: contain;
+}
+
+.ifpe-letterhead-copy {
+  min-width: 0;
+  line-height: 1.05;
+}
+
+.ifpe-letterhead-copy div {
+  color: #a8afa9;
+  font-size: 7.6pt;
+}
+
+.ifpe-letterhead-copy strong {
+  display: block;
+  color: #93b89b;
+  font-size: 9.8pt;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+}
+
+.ifpe-letterhead-copy em {
+  display: block;
+  color: #9fa7a1;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 8pt;
+  line-height: 1.06;
+}
+
+.ifpe-letterhead-code {
+  align-self: end;
+  padding-bottom: 2mm;
+  color: #9da5a1;
+  font-size: 7.2pt;
+  line-height: 1.18;
+}
+
+.ifpe-letterhead-code span {
+  display: block;
+}
+
+.ifpe-paper-content {
+  position: relative;
+  z-index: 1;
+  padding: 47.8mm 7mm 16mm 24mm;
+  font-size: 10pt;
+  line-height: 1.22;
+}
+
+.ifpe-title {
+  margin: 0 0 0.4mm;
+  color: #111;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10.7pt;
+  font-weight: 700;
+  line-height: 1.12;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.ifpe-term-line {
+  margin: 0 0 13.5mm;
+  color: #111;
+  font-size: 9.8pt;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.ifpe-faculty-line {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5mm;
+  margin: 0 0 3.2mm 2.5mm;
+  color: #111;
+  font-size: 10pt;
+}
+
+.ifpe-faculty-line span {
+  flex: 0 0 auto;
+}
+
+.ifpe-faculty-line strong {
+  flex: 0 1 58mm;
+  min-height: 4mm;
+  padding: 0 1.5mm 0.2mm;
+  border-bottom: 1px solid #111;
+  color: #111;
+  font-size: 9.6pt;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.ifpe-official-table {
+  width: 100%;
+  margin: 0 0 4.5mm;
+  table-layout: fixed;
+  border-collapse: collapse;
+  background: transparent;
+  color: #111;
+}
+
+.ifpe-official-table th,
+.ifpe-official-table td {
+  border: 1px solid #111;
+  padding: 0.95mm 0.9mm;
+  color: #111;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.ifpe-official-table th {
+  font-size: 6.2pt;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.ifpe-official-table td {
+  font-size: 7pt;
+  line-height: 1.2;
+}
+
+.ifpe-official-table td span {
+  display: block;
+  margin-bottom: 0.35mm;
+  font-size: 7pt;
+}
+
+.ifpe-official-table td strong {
+  display: block;
+  color: #111;
+  font-size: 7.8pt;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.ifpe-performance-table th,
+.ifpe-performance-table td {
+  height: 5.6mm;
+}
+
+.ifpe-main-header,
+.ifpe-section-title,
+.ifpe-total-cell {
+  background: #d8ebca;
+}
+
+.ifpe-section-title {
+  text-align: left !important;
+  padding-left: 2.2mm !important;
+  font-size: 8pt !important;
+}
+
+.ifpe-total-cell span {
+  display: block;
+  margin-bottom: 1.2mm;
+  color: #111;
+  font-size: 8pt;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ifpe-total-cell strong {
+  display: block;
+  color: #111;
+  font-size: 8.6pt;
+  font-weight: 700;
+}
+
+.ifpe-rating-table th {
+  height: 5.8mm;
+}
+
+.ifpe-rating-table td {
+  height: 3.7mm;
+}
+
+.ifpe-cell-commitment {
+  background: #d9edf8;
+}
+
+.ifpe-cell-knowledge {
+  background: #f1c7b8;
+}
+
+.ifpe-cell-teaching {
+  background: #fff0b8;
+}
+
+.ifpe-cell-management {
+  background: #d8ebca;
+}
+
+.ifpe-cell-overall {
+  background: #f22bc3;
+}
+
+.ifpe-comments-block {
+  margin: 5.5mm 0 0 2.5mm;
+}
+
+.ifpe-comments-block h2 {
+  margin: 0 0 2.5mm;
+  color: #111;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10.5pt;
+  font-weight: 700;
+}
+
+.ifpe-comments-block h2 em {
+  font-style: italic;
+}
+
+.ifpe-comments-box {
+  min-height: 15mm;
+  padding: 1mm 0;
+  background: transparent;
+}
+
+.ifpe-comments-list {
+  margin: 0;
+  padding-left: 8mm;
+  color: #111;
+}
+
+.ifpe-comments-list li {
+  margin: 0 0 1.5mm;
+  color: #111;
+  font-size: 9pt;
+  line-height: 1.25;
+}
+
+.ifpe-empty-comment {
+  color: #444 !important;
+  font-style: italic;
+}
+
+.ifpe-signature-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 80mm);
+  gap: 8mm;
+  margin: 4mm 0 0 2.5mm;
+  color: #111;
+}
+
+.ifpe-signature-block p {
+  margin: 0 0 12mm;
+  color: #111;
+  font-size: 9.8pt;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ifpe-signature-block-evaluated p {
+  margin-bottom: 14mm;
+}
+
+.ifpe-signature-line {
+  width: 67mm;
+  height: 1px;
+  border-bottom: 1px solid #111;
+}
+
+.ifpe-signature-block strong {
+  display: block;
+  margin-top: 0.6mm;
+  width: 72mm;
+  color: #111;
+  font-size: 9.3pt;
+  font-weight: 400;
+  line-height: 1.2;
+  text-align: left;
+}
+
 @media (max-width: 1199.98px) {
   .program-chair-faculty-details {
     gap: 0.3rem 0.85rem;
@@ -1069,6 +1393,7 @@
     margin-bottom: 0.62rem;
     line-height: 1.18;
   }
+
 }
 
 @media (max-width: 991.98px) {
@@ -1153,5 +1478,76 @@
 @media (max-height: 720px) {
   .auth-login-shell {
     align-items: flex-start;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    width: 210mm;
+    height: 297mm;
+    min-height: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    overflow: hidden !important;
+  }
+
+  .layout-menu,
+  .layout-navbar,
+  .ifpe-screen-controls,
+  .content-backdrop {
+    display: none !important;
+  }
+
+  .layout-wrapper,
+  .layout-container,
+  .layout-page,
+  .content-wrapper,
+  .container-xxl {
+    display: block !important;
+    width: 210mm !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .ifpe-print-shell {
+    width: 210mm !important;
+    height: 297mm !important;
+    position: fixed !important;
+    inset: 0 auto auto 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .ifpe-paper {
+    width: 210mm !important;
+    height: 297mm !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    background-image: var(--ifpe-template-image) !important;
+    background-position: top left !important;
+    background-repeat: no-repeat !important;
+    background-size: 100% 100% !important;
+    box-shadow: none !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .ifpe-letterhead {
+    display: grid !important;
+  }
+
+  .ifpe-paper-content {
+    padding: 47.8mm 7mm 16mm 24mm !important;
   }
 }
