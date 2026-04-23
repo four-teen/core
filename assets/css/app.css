@@ -878,16 +878,16 @@
 .ifpe-paper {
   box-sizing: border-box;
   width: 210mm;
-  height: 297mm;
-  min-height: 0;
+  height: auto;
+  min-height: var(--ifpe-print-height, 297mm);
   position: relative;
   margin: 0 auto;
-  overflow: hidden;
+  overflow: visible;
   background-color: #fff;
   background-image: var(--ifpe-template-image);
-  background-repeat: no-repeat;
+  background-repeat: repeat-y;
   background-position: top left;
-  background-size: 100% 100%;
+  background-size: 210mm 297mm;
   color: #111;
   font-family: Arial, Helvetica, sans-serif;
   box-shadow: 0 1.4rem 3rem rgba(31, 50, 84, 0.16);
@@ -914,12 +914,14 @@
   width: 20mm;
   max-height: 18mm;
   object-fit: contain;
+  transform: translateX(-8mm);
 }
 
 .ifpe-letterhead-seal {
   width: 17.5mm;
   height: 17.5mm;
   object-fit: contain;
+  transform: translateX(-8mm);
 }
 
 .ifpe-letterhead-copy {
@@ -967,6 +969,8 @@
   padding: 47.8mm 7mm 16mm 24mm;
   font-size: 10pt;
   line-height: 1.22;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .ifpe-title {
@@ -1003,14 +1007,18 @@
 }
 
 .ifpe-faculty-line strong {
-  flex: 0 1 58mm;
+  flex: 0 1 92mm;
   min-height: 4mm;
+  max-width: calc(100% - 32mm);
   padding: 0 1.5mm 0.2mm;
   border-bottom: 1px solid #111;
   color: #111;
-  font-size: 9.6pt;
+  font-size: 9.2pt;
   font-weight: 400;
   line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ifpe-official-table {
@@ -1118,14 +1126,14 @@
 }
 
 .ifpe-comments-block {
-  margin: 5.5mm 0 0 2.5mm;
+  margin: 3.2mm 0 0 2.5mm;
 }
 
 .ifpe-comments-block h2 {
-  margin: 0 0 2.5mm;
+  margin: 0 0 1.4mm;
   color: #111;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 10.5pt;
+  font-size: 10pt;
   font-weight: 700;
 }
 
@@ -1134,8 +1142,8 @@
 }
 
 .ifpe-comments-box {
-  min-height: 15mm;
-  padding: 1mm 0;
+  min-height: 0;
+  padding: 0.4mm 0;
   background: transparent;
 }
 
@@ -1146,10 +1154,15 @@
 }
 
 .ifpe-comments-list li {
-  margin: 0 0 1.5mm;
+  margin: 0 0 0.7mm;
   color: #111;
-  font-size: 9pt;
+  font-size: 8.8pt;
   line-height: 1.25;
+}
+
+.ifpe-comment-source {
+  color: #111;
+  font-weight: 700;
 }
 
 .ifpe-empty-comment {
@@ -1158,23 +1171,31 @@
 }
 
 .ifpe-signature-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 80mm);
-  gap: 8mm;
-  margin: 4mm 0 0 2.5mm;
+  display: block;
+  width: 80mm;
+  margin: 3.2mm 0 0 2.5mm;
   color: #111;
 }
 
+.ifpe-signature-block {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.ifpe-signature-block + .ifpe-signature-block {
+  margin-top: 4.5mm;
+}
+
 .ifpe-signature-block p {
-  margin: 0 0 12mm;
+  margin: 0 0 7mm;
   color: #111;
-  font-size: 9.8pt;
+  font-size: 9.5pt;
   font-weight: 700;
   line-height: 1.2;
 }
 
 .ifpe-signature-block-evaluated p {
-  margin-bottom: 14mm;
+  margin-bottom: 8mm;
 }
 
 .ifpe-signature-line {
@@ -1192,6 +1213,28 @@
   font-weight: 400;
   line-height: 1.2;
   text-align: left;
+}
+
+.ifpe-signature-name {
+  width: 67mm !important;
+  margin-top: 0 !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+}
+
+.ifpe-signature-name + .ifpe-signature-line {
+  margin-top: 0.35mm;
+}
+
+.ifpe-signature-role {
+  display: block;
+  margin-top: 0.3mm;
+  width: 67mm;
+  color: #111;
+  font-size: 9.3pt;
+  font-weight: 400;
+  line-height: 1.2;
+  text-align: center;
 }
 
 @media (max-width: 1199.98px) {
@@ -1490,18 +1533,27 @@
   html,
   body {
     width: 210mm;
-    height: 297mm;
-    min-height: 0;
+    min-height: 297mm;
     margin: 0 !important;
     padding: 0 !important;
     background: #fff !important;
-    overflow: hidden !important;
+    overflow: visible !important;
   }
 
   .layout-menu,
   .layout-navbar,
+  #layout-navbar,
+  #layout-navbar *,
+  .layout-menu-toggle,
+  .navbar-nav-right,
+  .admin-navbar-actions,
   .ifpe-screen-controls,
   .content-backdrop {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .layout-page::before {
     display: none !important;
   }
 
@@ -1513,16 +1565,15 @@
     display: block !important;
     width: 210mm !important;
     max-width: none !important;
-    min-height: 0 !important;
+    min-height: 297mm !important;
     margin: 0 !important;
     padding: 0 !important;
   }
 
   .ifpe-print-shell {
     width: 210mm !important;
-    height: 297mm !important;
-    position: fixed !important;
-    inset: 0 auto auto 0 !important;
+    min-height: var(--ifpe-print-height, 297mm) !important;
+    position: static !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
@@ -1530,17 +1581,17 @@
 
   .ifpe-paper {
     width: 210mm !important;
-    height: 297mm !important;
-    min-height: 0 !important;
+    height: auto !important;
+    min-height: var(--ifpe-print-height, 297mm) !important;
     margin: 0 !important;
-    overflow: hidden !important;
+    overflow: visible !important;
     background-image: var(--ifpe-template-image) !important;
     background-position: top left !important;
-    background-repeat: no-repeat !important;
-    background-size: 100% 100% !important;
+    background-repeat: repeat-y !important;
+    background-size: 210mm 297mm !important;
     box-shadow: none !important;
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
   }
 
   .ifpe-letterhead {

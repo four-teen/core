@@ -7,6 +7,10 @@ if (is_admin_authenticated()) {
     redirect_to('administrator/index.php');
 }
 
+if (is_program_chair_authenticated() || is_role_evaluator_authenticated()) {
+    redirect_to(administrator_role_landing_path(administrator_profile_role()));
+}
+
 if (is_student_authenticated()) {
     redirect_to('student/index.php');
 }

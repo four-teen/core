@@ -11,6 +11,10 @@ if (is_program_chair_authenticated()) {
     redirect_to('programchair/index.php');
 }
 
+if (is_role_evaluator_authenticated()) {
+    redirect_to('roleevaluation/index.php');
+}
+
 if (is_student_authenticated()) {
     redirect_to('student/index.php');
 }
@@ -20,10 +24,10 @@ $noticeMessage = flash('notice');
 $googleReady = google_configuration_is_ready();
 $allowedDomain = primary_administrator_domain();
 $loginHeading = preg_replace('/^\s*CORE\s+/i', '', app_name()) ?: app_name();
-$googleAccessMessage = 'Use one Google sign-in button for authorized users and enrolled students. Administrator and program chair access is managed from User Management, while student access is matched from enrolled records.';
+$googleAccessMessage = 'Use one Google sign-in button for authorized users and enrolled students. Administrator, program chair, dean, and campus director access is managed from User Management, while student access is matched from enrolled records.';
 $googleButtonCaption = $allowedDomain !== null
-    ? 'Administrator, program chair, and student access use this same Google sign-in'
-    : 'The system routes administrators, program chairs, and students automatically';
+    ? 'Administrator, evaluator, and student access use this same Google sign-in'
+    : 'The system routes administrators, evaluators, and students automatically';
 ?>
 <!DOCTYPE html>
 <html

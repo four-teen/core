@@ -6,6 +6,8 @@ function user_management_role_options(): array
     return [
         'administrator' => 'Administrator',
         'program_chair' => 'Program Chair',
+        'dean' => 'Dean',
+        'director' => 'Campus Director',
     ];
 }
 

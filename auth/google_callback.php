@@ -57,11 +57,7 @@ try {
         }
 
         login_administrator($profile, $managedUser);
-        if (user_management_normalize_role((string) ($managedUser['account_role'] ?? '')) === 'program_chair') {
-            redirect_to('programchair/index.php');
-        }
-
-        redirect_to('administrator/index.php');
+        redirect_to(administrator_role_landing_path((string) ($managedUser['account_role'] ?? 'administrator')));
     }
 
     $student = find_student_for_login($pdo, $email);

@@ -129,7 +129,7 @@ require __DIR__ . '/_start.php';
 
 <?php if ($selectedFacultyId > 0 && $report === null && $databaseError === null): ?>
   <div class="alert alert-warning ifpe-screen-controls" role="alert">
-    The selected faculty member could not be found in the active faculty master list.
+    The selected faculty member could not be found in the active faculty master list or has no submitted evaluation yet.
   </div>
 <?php endif; ?>
 
@@ -317,7 +317,12 @@ require __DIR__ . '/_start.php';
               <li class="ifpe-empty-comment">&nbsp;</li>
             <?php endif; ?>
             <?php foreach ($report['comments'] as $comment): ?>
-              <li><?= h((string) $comment['text']) ?></li>
+              <li>
+                <?php if ((string) ($comment['source'] ?? '') !== 'Student'): ?>
+                  <strong class="ifpe-comment-source"><?= h((string) ($comment['source'] ?? 'Supervisor')) ?>:</strong>
+                <?php endif; ?>
+                <?= h((string) $comment['text']) ?>
+              </li>
             <?php endforeach; ?>
             </ol>
           </div>
@@ -330,18 +335,96 @@ require __DIR__ . '/_start.php';
           </div>
           <div class="ifpe-signature-block">
             <p>Recommending Approval:</p>
+            <strong class="ifpe-signature-name">ELBREN O. ANTONIO, DIT</strong>
             <div class="ifpe-signature-line"></div>
-            <strong>College Dean</strong>
+            <span class="ifpe-signature-role">College Dean</span>
           </div>
           <div class="ifpe-signature-block">
             <p>Approved:</p>
+            <strong class="ifpe-signature-name">ENG. ROMMEL M. LAGUMEN</strong>
             <div class="ifpe-signature-line"></div>
-            <strong>Campus Director</strong>
+            <span class="ifpe-signature-role">Campus Director</span>
           </div>
         </div>
       </div>
     </section>
   </div>
+  <script>
+  (() => {
+    const paper = document.querySelector('.ifpe-paper');
+    const content = paper ? paper.querySelector('.ifpe-paper-content') : null;
+    const sourceLetterhead = paper ? paper.querySelector('.ifpe-letterhead') : null;
+
+    if (!paper || !content || !sourceLetterhead) {
+      return;
+    }
+
+    let syncFrame = 0;
+
+    const measureA4PageHeight = () => {
+      const marker = document.createElement('div');
+      marker.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;height:297mm;width:1mm;top:0;left:0;';
+      document.body.appendChild(marker);
+      const height = marker.getBoundingClientRect().height;
+      marker.remove();
+
+      return height || 1122;
+    };
+
+    const removeRepeatedLetterheads = () => {
+      paper.querySelectorAll('.ifpe-letterhead-repeat').forEach((letterhead) => {
+        letterhead.remove();
+      });
+    };
+
+    const applyPageLayout = () => {
+      syncFrame = 0;
+      removeRepeatedLetterheads();
+      paper.style.setProperty('--ifpe-print-height', '297mm');
+
+      const pageHeight = measureA4PageHeight();
+      const contentStyle = window.getComputedStyle(content);
+      const paddingTop = parseFloat(contentStyle.paddingTop) || 0;
+      const paddingBottom = parseFloat(contentStyle.paddingBottom) || 0;
+      const usablePageHeight = Math.max(1, pageHeight - paddingTop - paddingBottom);
+      const contentHeight = Math.max(0, content.scrollHeight - paddingTop - paddingBottom);
+      const pageTolerance = 12;
+      const pageCount = contentHeight <= usablePageHeight + pageTolerance
+        ? 1
+        : Math.max(1, Math.ceil((contentHeight - pageTolerance) / usablePageHeight));
+
+      paper.style.setProperty('--ifpe-print-height', `${pageCount * 297}mm`);
+
+      for (let pageIndex = 1; pageIndex < pageCount; pageIndex += 1) {
+        const letterhead = sourceLetterhead.cloneNode(true);
+        letterhead.classList.add('ifpe-letterhead-repeat');
+        letterhead.setAttribute('aria-hidden', 'true');
+        letterhead.style.top = `calc(${pageIndex} * 297mm + 9mm)`;
+        paper.appendChild(letterhead);
+      }
+    };
+
+    const syncPageLayout = (immediate = false) => {
+      if (syncFrame !== 0) {
+        window.cancelAnimationFrame(syncFrame);
+        syncFrame = 0;
+      }
+
+      if (immediate) {
+        applyPageLayout();
+        return;
+      }
+
+      syncFrame = window.requestAnimationFrame(applyPageLayout);
+    };
+
+    window.addEventListener('load', () => syncPageLayout());
+    window.addEventListener('resize', () => syncPageLayout());
+    window.addEventListener('beforeprint', () => syncPageLayout(true));
+    window.addEventListener('afterprint', () => syncPageLayout());
+    syncPageLayout();
+  })();
+  </script>
 <?php else: ?>
   <div class="card ifpe-screen-controls">
     <div class="card-body text-center py-5">

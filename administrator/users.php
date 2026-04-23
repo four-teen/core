@@ -26,10 +26,16 @@ $userManagementForm = [
     'account_role' => 'program_chair',
     'is_active' => '1',
 ];
+$assignmentTargetOptions = [
+    'dean' => [],
+    'director' => [],
+];
+$assignedUserIds = [];
 
 try {
     $pdo = db();
     ensure_user_management_table($pdo);
+    ensure_role_evaluation_tables($pdo);
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!verify_csrf_token((string) ($_POST['csrf_token'] ?? ''))) {
@@ -48,6 +54,9 @@ try {
                 'account_role' => user_management_normalize_role((string) ($_POST['account_role'] ?? 'program_chair')),
                 'is_active' => !empty($_POST['is_active']) ? '1' : '0',
             ];
+            $assignedUserIds = isset($_POST['assigned_user_ids']) && is_array($_POST['assigned_user_ids'])
+                ? array_values(array_unique(array_map('intval', $_POST['assigned_user_ids'])))
+                : [];
 
             $savedUserId = user_management_save(
                 $pdo,
@@ -58,6 +67,13 @@ try {
                     'is_active' => $userManagementForm['is_active'] === '1',
                 ],
                 $userId !== '' ? (int) $userId : null
+            );
+            role_evaluation_replace_assignments(
+                $pdo,
+                $savedUserId,
+                $userManagementForm['account_role'],
+                role_evaluation_is_evaluator_role($userManagementForm['account_role']) ? $assignedUserIds : [],
+                (int) ($administrator['user_management_id'] ?? 0)
             );
 
             $message = $userId !== ''
@@ -91,7 +107,12 @@ try {
 try {
     $pdo = db();
     ensure_user_management_table($pdo);
+    ensure_role_evaluation_tables($pdo);
     $userManagement = user_management_list($pdo);
+    $assignmentTargetOptions = [
+        'dean' => role_evaluation_assignment_target_options($pdo, 'dean'),
+        'director' => role_evaluation_assignment_target_options($pdo, 'director'),
+    ];
     $managedUserStats['total'] = count($userManagement);
     $managedUserStats['active'] = count(array_filter($userManagement, static function (array $row): bool {
         return (int) ($row['is_active'] ?? 0) === 1;
@@ -113,6 +134,7 @@ try {
                 'account_role' => user_management_normalize_role((string) ($editingUser['account_role'] ?? 'program_chair')),
                 'is_active' => (int) ($editingUser['is_active'] ?? 0) === 1 ? '1' : '0',
             ];
+            $assignedUserIds = role_evaluation_assigned_target_ids($pdo, $editUserId);
         }
     }
 } catch (Throwable $exception) {
@@ -132,7 +154,7 @@ require __DIR__ . '/_start.php';
             <span class="badge bg-label-success mb-3">User Management</span>
             <h3 class="mb-2">Authorized non-student users.</h3>
             <p class="mb-0">
-              Manage the Google accounts allowed to open administrator and program chair modules before student-record matching begins.
+              Manage the Google accounts allowed to open administrator, program chair, dean, and campus director modules before student-record matching begins.
             </p>
           </div>
           <div class="col-lg-4">
@@ -165,7 +187,7 @@ require __DIR__ . '/_start.php';
     <div class="card h-100">
       <div class="card-header">
         <h5 class="mb-0">User Management</h5>
-        <small class="text-muted">Authorize administrator and program chair email addresses for Google sign-in.</small>
+        <small class="text-muted">Authorize institutional email addresses for Google sign-in and evaluator access.</small>
       </div>
       <div class="card-body">
         <?php if ($userManagementError !== null): ?>
@@ -228,6 +250,45 @@ require __DIR__ . '/_start.php';
                 </option>
               <?php endforeach; ?>
             </select>
+          </div>
+
+          <div class="mb-3 role-assignment-panel <?= $userManagementForm['account_role'] === 'dean' ? '' : 'd-none' ?>" data-assignment-panel="dean">
+            <label for="dean_assigned_user_ids" class="form-label">Assigned Program Chairs</label>
+            <select
+              class="form-select"
+              id="dean_assigned_user_ids"
+              name="assigned_user_ids[]"
+              multiple
+              size="6"
+              <?= $userManagementForm['account_role'] === 'dean' ? '' : 'disabled' ?>
+            >
+              <?php foreach ($assignmentTargetOptions['dean'] as $targetOption): ?>
+                <?php $targetUserId = (int) ($targetOption['user_management_id'] ?? 0); ?>
+                <option value="<?= h((string) $targetUserId) ?>" <?= in_array($targetUserId, $assignedUserIds, true) ? 'selected' : '' ?>>
+                  <?= h((string) ($targetOption['display_name'] ?? '')) ?> - <?= h((string) ($targetOption['email_address'] ?? '')) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+            <small class="text-muted">Dean accounts can evaluate only the selected Program Chair accounts.</small>
+          </div>
+
+          <div class="mb-3 role-assignment-panel <?= $userManagementForm['account_role'] === 'director' ? '' : 'd-none' ?>" data-assignment-panel="director">
+            <label for="director_assigned_user_ids" class="form-label">Assigned Dean</label>
+            <select
+              class="form-select"
+              id="director_assigned_user_ids"
+              name="assigned_user_ids[]"
+              <?= $userManagementForm['account_role'] === 'director' ? '' : 'disabled' ?>
+            >
+              <option value="">Select Dean</option>
+              <?php foreach ($assignmentTargetOptions['director'] as $targetOption): ?>
+                <?php $targetUserId = (int) ($targetOption['user_management_id'] ?? 0); ?>
+                <option value="<?= h((string) $targetUserId) ?>" <?= in_array($targetUserId, $assignedUserIds, true) ? 'selected' : '' ?>>
+                  <?= h((string) ($targetOption['display_name'] ?? '')) ?> - <?= h((string) ($targetOption['email_address'] ?? '')) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+            <small class="text-muted">Campus Director accounts can evaluate only the selected Dean account.</small>
           </div>
 
           <div class="form-check form-switch mb-4">
@@ -328,4 +389,29 @@ require __DIR__ . '/_start.php';
     </div>
   </div>
 </div>
+<script>
+  window.addEventListener('DOMContentLoaded', function () {
+    var roleSelect = document.getElementById('account_role');
+    var panels = document.querySelectorAll('[data-assignment-panel]');
+
+    if (!roleSelect || panels.length === 0) {
+      return;
+    }
+
+    function syncAssignmentPanels() {
+      panels.forEach(function (panel) {
+        var isActive = panel.getAttribute('data-assignment-panel') === roleSelect.value;
+        var select = panel.querySelector('select');
+
+        panel.classList.toggle('d-none', !isActive);
+        if (select) {
+          select.disabled = !isActive;
+        }
+      });
+    }
+
+    roleSelect.addEventListener('change', syncAssignmentPanels);
+    syncAssignmentPanels();
+  });
+</script>
 <?php require __DIR__ . '/_end.php'; ?>

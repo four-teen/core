@@ -78,6 +78,10 @@ function individual_faculty_performance_faculty_options(PDO $pdo): array
             GROUP BY faculty_id
          ) pr ON pr.faculty_id = f.faculty_id
          WHERE f.status = 'active'
+           AND (
+                COALESCE(sr.student_evaluation_count, 0) > 0
+                OR COALESCE(pr.supervisor_evaluation_count, 0) > 0
+           )
          ORDER BY
             (COALESCE(sr.student_evaluation_count, 0) + COALESCE(pr.supervisor_evaluation_count, 0)) DESC,
             f.last_name ASC,
@@ -156,7 +160,11 @@ function individual_faculty_performance_report(PDO $pdo, int $facultyId, ?array 
     }
 
     $studentSection = individual_faculty_performance_student_section($pdo, $facultyId, $termFilter);
-    $supervisorSection = individual_faculty_performance_supervisor_section($pdo, $facultyId);
+    $supervisorSection = individual_faculty_performance_supervisor_section($pdo, $facultyId, $faculty);
+
+    if ((int) $studentSection['evaluation_count'] <= 0 && (int) $supervisorSection['evaluation_count'] <= 0) {
+        return null;
+    }
 
     $studentPercentage = $studentSection['weighted_percentage'];
     $supervisorPercentage = $supervisorSection['weighted_percentage'];
@@ -177,7 +185,7 @@ function individual_faculty_performance_report(PDO $pdo, int $facultyId, ?array 
         'current_percentage' => $currentPercentage,
         'is_complete' => $isComplete,
         'rating_label' => individual_faculty_performance_rating_label($currentPercentage, $isComplete),
-        'comments' => individual_faculty_performance_comments($pdo, $facultyId, $termFilter),
+        'comments' => individual_faculty_performance_comments($pdo, $facultyId, $termFilter, 12, $faculty),
     ];
 }
 
@@ -253,48 +261,360 @@ function individual_faculty_performance_student_section(PDO $pdo, int $facultyId
     );
 }
 
-function individual_faculty_performance_supervisor_section(PDO $pdo, int $facultyId): array
+function individual_faculty_performance_supervisor_section(PDO $pdo, int $facultyId, array $faculty = []): array
 {
-    $parameters = ['faculty_id' => $facultyId];
+    ensure_role_evaluation_tables($pdo);
 
-    $summaryStatement = $pdo->prepare(
-        "SELECT
-            COUNT(*) AS evaluation_count,
-            COUNT(DISTINCT ev.program_chair_user_management_id) AS evaluator_count,
-            COUNT(DISTINCT ev.subject_id) AS subject_count,
-            ROUND(AVG(NULLIF(ev.average_rating, 0)), 2) AS stored_average_rating,
-            MAX(ev.updated_at) AS last_updated
-         FROM tbl_program_chair_faculty_evaluations ev
-         WHERE ev.faculty_id = :faculty_id
-           AND ev.submission_status = 'submitted'"
-    );
-    $summaryStatement->execute($parameters);
-    $summary = $summaryStatement->fetch() ?: [];
-
-    $categoryStatement = $pdo->prepare(
-        "SELECT
-            ans.category_key,
-            MAX(ans.category_title) AS category_title,
-            ROUND(AVG(ans.rating), 2) AS mean_rating,
-            COUNT(*) AS response_count,
-            COUNT(DISTINCT ev.program_chair_evaluation_id) AS evaluation_count
-         FROM tbl_program_chair_faculty_evaluation_answers ans
-         INNER JOIN tbl_program_chair_faculty_evaluations ev
-            ON ev.program_chair_evaluation_id = ans.program_chair_evaluation_id
-         WHERE ev.faculty_id = :faculty_id
-           AND ev.submission_status = 'submitted'
-           AND ans.rating BETWEEN 1 AND 5
-         GROUP BY ans.category_key
-         ORDER BY MIN(ans.question_order) ASC"
-    );
-    $categoryStatement->execute($parameters);
+    $summary = [
+        'evaluation_count' => 0,
+        'evaluator_count' => 0,
+        'subject_count' => 0,
+        'stored_average_rating' => null,
+        'last_updated' => '',
+    ];
+    $categories = individual_faculty_performance_supervisor_rating_sources($pdo, $facultyId, $faculty, $summary);
 
     return individual_faculty_performance_build_rating_section(
         'Supervisors Rating',
         40,
         $summary,
-        $categoryStatement->fetchAll()
+        $categories
     );
+}
+
+function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int $facultyId, array $faculty, array &$summary): array
+{
+    $categoryTotals = [];
+    $sourceEvaluationIds = [];
+    $evaluatorIds = [];
+    $subjectIds = [];
+    $averageRatings = [];
+    $lastUpdated = '';
+    $programChairUserIds = [];
+
+    $directStatement = $pdo->prepare(
+        "SELECT
+            ev.program_chair_evaluation_id,
+            ev.program_chair_user_management_id,
+            ev.subject_id,
+            ev.average_rating,
+            ev.updated_at,
+            ans.category_key,
+            ans.rating
+         FROM tbl_program_chair_faculty_evaluations ev
+         LEFT JOIN tbl_program_chair_faculty_evaluation_answers ans
+            ON ans.program_chair_evaluation_id = ev.program_chair_evaluation_id
+         WHERE ev.faculty_id = :faculty_id
+           AND ev.submission_status = 'submitted'
+         ORDER BY ev.program_chair_evaluation_id ASC, ans.question_order ASC"
+    );
+    $directStatement->execute(['faculty_id' => $facultyId]);
+
+    foreach ($directStatement->fetchAll() as $row) {
+        $sourceKey = 'program_chair:' . (string) ((int) ($row['program_chair_evaluation_id'] ?? 0));
+        $sourceEvaluationIds[$sourceKey] = true;
+
+        $programChairUserId = (int) ($row['program_chair_user_management_id'] ?? 0);
+        if ($programChairUserId > 0) {
+            $programChairUserIds[$programChairUserId] = true;
+            $evaluatorIds['program_chair:' . (string) $programChairUserId] = true;
+        }
+
+        $subjectId = (int) ($row['subject_id'] ?? 0);
+        if ($subjectId > 0) {
+            $subjectIds[$subjectId] = true;
+        }
+
+        $averageRating = (float) ($row['average_rating'] ?? 0);
+        if ($averageRating > 0) {
+            $averageRatings[$sourceKey] = $averageRating;
+        }
+
+        $lastUpdated = individual_faculty_performance_latest_datetime($lastUpdated, (string) ($row['updated_at'] ?? ''));
+
+        $categoryKey = (string) ($row['category_key'] ?? '');
+        $rating = (int) ($row['rating'] ?? 0);
+        if (isset(individual_faculty_performance_categories()[$categoryKey]) && $rating >= 1 && $rating <= 5) {
+            individual_faculty_performance_add_supervisor_category_rating(
+                $categoryTotals,
+                $categoryKey,
+                $rating,
+                $sourceKey
+            );
+        }
+    }
+
+    $facultyUser = individual_faculty_performance_faculty_user_management($pdo, $faculty);
+    $facultyUserRole = $facultyUser !== null
+        ? user_management_normalize_role((string) ($facultyUser['account_role'] ?? ''))
+        : '';
+    $facultyUserId = $facultyUser !== null ? (int) ($facultyUser['user_management_id'] ?? 0) : 0;
+
+    if ($facultyUserRole === 'program_chair' && $facultyUserId > 0) {
+        $programChairUserIds[$facultyUserId] = true;
+    }
+
+    $deanUserIds = [];
+    if ($facultyUserRole === 'dean' && $facultyUserId > 0) {
+        $deanUserIds[$facultyUserId] = true;
+    }
+
+    foreach (individual_faculty_performance_dean_user_ids_for_program_chairs($pdo, array_keys($programChairUserIds)) as $deanUserId) {
+        $deanUserIds[$deanUserId] = true;
+    }
+
+    $roleEvaluationIds = [];
+    foreach (individual_faculty_performance_role_evaluation_ids_for_targets($pdo, 'dean', 'program_chair', array_keys($programChairUserIds)) as $row) {
+        $roleEvaluationId = (int) ($row['role_evaluation_id'] ?? 0);
+        if ($roleEvaluationId > 0) {
+            $roleEvaluationIds[$roleEvaluationId] = true;
+        }
+
+        $deanUserId = (int) ($row['evaluator_user_management_id'] ?? 0);
+        if ($deanUserId > 0) {
+            $deanUserIds[$deanUserId] = true;
+        }
+    }
+
+    foreach (individual_faculty_performance_role_evaluation_ids_for_targets($pdo, 'director', 'dean', array_keys($deanUserIds)) as $row) {
+        $roleEvaluationId = (int) ($row['role_evaluation_id'] ?? 0);
+        if ($roleEvaluationId > 0) {
+            $roleEvaluationIds[$roleEvaluationId] = true;
+        }
+    }
+
+    if ($roleEvaluationIds !== []) {
+        $placeholders = implode(',', array_fill(0, count($roleEvaluationIds), '?'));
+        $roleStatement = $pdo->prepare(
+            "SELECT
+                ev.role_evaluation_id,
+                ev.evaluator_user_management_id,
+                ev.average_rating,
+                ev.updated_at,
+                ans.category_key,
+                ans.rating
+             FROM tbl_role_evaluations ev
+             LEFT JOIN tbl_role_evaluation_answers ans
+                ON ans.role_evaluation_id = ev.role_evaluation_id
+             WHERE ev.role_evaluation_id IN (" . $placeholders . ")
+               AND ev.submission_status = 'submitted'
+             ORDER BY ev.role_evaluation_id ASC, ans.question_order ASC"
+        );
+        $roleStatement->execute(array_keys($roleEvaluationIds));
+
+        foreach ($roleStatement->fetchAll() as $row) {
+            $sourceKey = 'role:' . (string) ((int) ($row['role_evaluation_id'] ?? 0));
+            $sourceEvaluationIds[$sourceKey] = true;
+
+            $evaluatorId = (int) ($row['evaluator_user_management_id'] ?? 0);
+            if ($evaluatorId > 0) {
+                $evaluatorIds['role:' . (string) $evaluatorId] = true;
+            }
+
+            $averageRating = (float) ($row['average_rating'] ?? 0);
+            if ($averageRating > 0) {
+                $averageRatings[$sourceKey] = $averageRating;
+            }
+
+            $lastUpdated = individual_faculty_performance_latest_datetime($lastUpdated, (string) ($row['updated_at'] ?? ''));
+
+            $categoryKey = individual_faculty_performance_role_category_key((string) ($row['category_key'] ?? ''));
+            $rating = (int) ($row['rating'] ?? 0);
+            if ($categoryKey !== '' && $rating >= 1 && $rating <= 5) {
+                individual_faculty_performance_add_supervisor_category_rating(
+                    $categoryTotals,
+                    $categoryKey,
+                    $rating,
+                    $sourceKey
+                );
+            }
+        }
+    }
+
+    $categoryRows = [];
+    foreach (individual_faculty_performance_categories() as $categoryKey => $category) {
+        if (!isset($categoryTotals[$categoryKey])) {
+            continue;
+        }
+
+        $categoryTotal = $categoryTotals[$categoryKey];
+        $responseCount = (int) ($categoryTotal['response_count'] ?? 0);
+        if ($responseCount <= 0) {
+            continue;
+        }
+
+        $categoryRows[] = [
+            'category_key' => $categoryKey,
+            'category_title' => (string) $category['title'],
+            'mean_rating' => round(((float) $categoryTotal['total']) / $responseCount, 2),
+            'response_count' => $responseCount,
+            'evaluation_count' => count($categoryTotal['evaluation_ids'] ?? []),
+        ];
+    }
+
+    $summary = [
+        'evaluation_count' => count($sourceEvaluationIds),
+        'evaluator_count' => count($evaluatorIds),
+        'subject_count' => count($subjectIds),
+        'stored_average_rating' => $averageRatings !== []
+            ? round(array_sum($averageRatings) / count($averageRatings), 2)
+            : null,
+        'last_updated' => $lastUpdated,
+    ];
+
+    return $categoryRows;
+}
+
+function individual_faculty_performance_add_supervisor_category_rating(array &$categoryTotals, string $categoryKey, int $rating, string $sourceKey): void
+{
+    if (!isset($categoryTotals[$categoryKey])) {
+        $categoryTotals[$categoryKey] = [
+            'total' => 0,
+            'response_count' => 0,
+            'evaluation_ids' => [],
+        ];
+    }
+
+    $categoryTotals[$categoryKey]['total'] += $rating;
+    $categoryTotals[$categoryKey]['response_count']++;
+    $categoryTotals[$categoryKey]['evaluation_ids'][$sourceKey] = true;
+}
+
+function individual_faculty_performance_role_category_key(string $categoryKey): string
+{
+    $categoryKey = trim($categoryKey);
+
+    if (isset(individual_faculty_performance_categories()[$categoryKey])) {
+        return $categoryKey;
+    }
+
+    $map = [
+        'professional_commitment' => 'commitment',
+        'leadership_and_supervision' => 'management_of_learning',
+        'program_management' => 'teaching_for_independent_learning',
+        'collaboration_and_service' => 'knowledge_of_subject_matter',
+    ];
+
+    return $map[$categoryKey] ?? '';
+}
+
+function individual_faculty_performance_latest_datetime(string $current, string $candidate): string
+{
+    $candidate = trim($candidate);
+    if ($candidate === '') {
+        return $current;
+    }
+
+    if ($current === '' || strcmp($candidate, $current) > 0) {
+        return $candidate;
+    }
+
+    return $current;
+}
+
+function individual_faculty_performance_dean_user_ids_for_program_chairs(PDO $pdo, array $programChairUserIds): array
+{
+    $programChairUserIds = array_values(array_unique(array_filter(array_map('intval', $programChairUserIds))));
+    if ($programChairUserIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($programChairUserIds), '?'));
+    $statement = $pdo->prepare(
+        "SELECT DISTINCT evaluator_user_management_id
+         FROM tbl_role_evaluator_assignments
+         WHERE evaluator_role = 'dean'
+           AND evaluatee_role = 'program_chair'
+           AND is_active = 1
+           AND evaluatee_user_management_id IN (" . $placeholders . ")"
+    );
+    $statement->execute($programChairUserIds);
+
+    return array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+}
+
+function individual_faculty_performance_role_evaluation_ids_for_targets(PDO $pdo, string $evaluatorRole, string $targetRole, array $targetUserIds): array
+{
+    $targetUserIds = array_values(array_unique(array_filter(array_map('intval', $targetUserIds))));
+    if ($targetUserIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($targetUserIds), '?'));
+    $statement = $pdo->prepare(
+        "SELECT role_evaluation_id, evaluator_user_management_id, evaluatee_user_management_id
+         FROM tbl_role_evaluations
+         WHERE evaluator_role = ?
+           AND evaluatee_role = ?
+           AND submission_status = 'submitted'
+           AND evaluatee_user_management_id IN (" . $placeholders . ")"
+    );
+    $statement->execute(array_merge([$evaluatorRole, $targetRole], $targetUserIds));
+
+    return $statement->fetchAll();
+}
+
+function individual_faculty_performance_faculty_user_management(PDO $pdo, array $faculty): ?array
+{
+    $facultyTokens = individual_faculty_performance_name_tokens(
+        implode(' ', [
+            (string) ($faculty['last_name'] ?? ''),
+            (string) ($faculty['first_name'] ?? ''),
+            (string) ($faculty['middle_name'] ?? ''),
+            (string) ($faculty['ext_name'] ?? ''),
+        ])
+    );
+
+    if (count($facultyTokens) < 2) {
+        return null;
+    }
+
+    $statement = $pdo->query(
+        "SELECT user_management_id, email_address, full_name, account_role, is_active
+         FROM tbl_user_management
+         WHERE is_active = 1
+           AND account_role IN ('program_chair', 'dean', 'director')"
+    );
+
+    $bestMatch = null;
+    $bestScore = 0;
+    foreach ($statement->fetchAll() as $user) {
+        $userTokens = individual_faculty_performance_name_tokens((string) ($user['full_name'] ?? ''));
+        if (count($userTokens) < 2) {
+            continue;
+        }
+
+        $missingTokens = array_diff($userTokens, $facultyTokens);
+        if ($missingTokens !== []) {
+            continue;
+        }
+
+        $score = count($userTokens);
+        if ($score > $bestScore) {
+            $bestMatch = $user;
+            $bestScore = $score;
+        }
+    }
+
+    return $bestMatch;
+}
+
+function individual_faculty_performance_name_tokens(string $name): array
+{
+    $normalized = strtolower($name);
+    $normalized = preg_replace('/[^a-z0-9]+/', ' ', $normalized);
+    $parts = preg_split('/\s+/', trim((string) $normalized));
+    $tokens = [];
+
+    foreach ($parts ?: [] as $part) {
+        if ($part === '') {
+            continue;
+        }
+
+        $tokens[$part] = true;
+    }
+
+    return array_keys($tokens);
 }
 
 function individual_faculty_performance_build_rating_section(string $label, float $sourceWeight, array $summary, array $categoryRows): array
@@ -408,8 +728,10 @@ function individual_faculty_performance_term_scope(?array $termFilter, array $te
     ];
 }
 
-function individual_faculty_performance_comments(PDO $pdo, int $facultyId, ?array $termFilter, int $limit = 6): array
+function individual_faculty_performance_comments(PDO $pdo, int $facultyId, ?array $termFilter, int $limit = 12, array $faculty = []): array
 {
+    ensure_role_evaluation_tables($pdo);
+
     $studentCondition = "ev.faculty_id = :faculty_id
         AND ev.submission_status = 'submitted'
         AND ev.student_enrollment_id IS NOT NULL
@@ -437,44 +759,186 @@ function individual_faculty_performance_comments(PDO $pdo, int $facultyId, ?arra
 
     $comments = [];
     foreach ($studentStatement->fetchAll() as $row) {
-        $comments[] = [
-            'source' => 'Student',
-            'author_label' => (string) ($row['author_label'] ?? ''),
-            'context_label' => (string) ($row['context_label'] ?? ''),
-            'text' => trim((string) ($row['comment_text'] ?? '')),
-            'updated_at' => (string) ($row['updated_at'] ?? ''),
-        ];
+        individual_faculty_performance_add_comment(
+            $comments,
+            'Student',
+            (string) ($row['author_label'] ?? ''),
+            (string) ($row['context_label'] ?? ''),
+            (string) ($row['comment_text'] ?? ''),
+            (string) ($row['updated_at'] ?? '')
+        );
     }
 
+    $programChairUserIds = [];
+    $deanUserIds = [];
+    $supervisorComments = [];
     $supervisorStatement = $pdo->prepare(
         "SELECT
             ev.comment_text,
             ev.subject_text AS context_label,
-            ev.updated_at
+            ev.updated_at,
+            ev.program_chair_user_management_id,
+            um.full_name AS evaluator_name,
+            um.email_address AS evaluator_email
          FROM tbl_program_chair_faculty_evaluations ev
+         LEFT JOIN tbl_user_management um
+            ON um.user_management_id = ev.program_chair_user_management_id
          WHERE ev.faculty_id = :faculty_id
            AND ev.submission_status = 'submitted'
-           AND TRIM(COALESCE(ev.comment_text, '')) <> ''
-         ORDER BY ev.updated_at DESC
-         LIMIT " . max(1, min(25, $limit))
+         ORDER BY ev.updated_at DESC"
     );
     $supervisorStatement->execute(['faculty_id' => $facultyId]);
 
     foreach ($supervisorStatement->fetchAll() as $row) {
-        $comments[] = [
-            'source' => 'Supervisor',
-            'author_label' => '',
-            'context_label' => (string) ($row['context_label'] ?? ''),
-            'text' => trim((string) ($row['comment_text'] ?? '')),
-            'updated_at' => (string) ($row['updated_at'] ?? ''),
-        ];
+        $programChairUserId = (int) ($row['program_chair_user_management_id'] ?? 0);
+        if ($programChairUserId > 0) {
+            $programChairUserIds[$programChairUserId] = true;
+        }
+
+        individual_faculty_performance_add_comment(
+            $supervisorComments,
+            'Program Chair',
+            role_evaluation_user_display_name([
+                'full_name' => (string) ($row['evaluator_name'] ?? ''),
+                'email_address' => (string) ($row['evaluator_email'] ?? ''),
+            ]),
+            (string) ($row['context_label'] ?? ''),
+            (string) ($row['comment_text'] ?? ''),
+            (string) ($row['updated_at'] ?? '')
+        );
+    }
+
+    $facultyUser = $faculty !== [] ? individual_faculty_performance_faculty_user_management($pdo, $faculty) : null;
+    $facultyUserRole = $facultyUser !== null
+        ? user_management_normalize_role((string) ($facultyUser['account_role'] ?? ''))
+        : '';
+    $facultyUserId = $facultyUser !== null ? (int) ($facultyUser['user_management_id'] ?? 0) : 0;
+
+    if ($facultyUserRole === 'program_chair' && $facultyUserId > 0) {
+        $programChairUserIds[$facultyUserId] = true;
+    }
+
+    if ($facultyUserRole === 'dean' && $facultyUserId > 0) {
+        $deanUserIds[$facultyUserId] = true;
+    }
+
+    foreach (individual_faculty_performance_dean_user_ids_for_program_chairs($pdo, array_keys($programChairUserIds)) as $deanUserId) {
+        $deanUserIds[$deanUserId] = true;
+    }
+
+    $deanComments = individual_faculty_performance_role_evaluation_comments(
+        $pdo,
+        'dean',
+        'program_chair',
+        array_keys($programChairUserIds),
+        'Dean',
+        $deanUserIds
+    );
+
+    $directorComments = individual_faculty_performance_role_evaluation_comments(
+        $pdo,
+        'director',
+        'dean',
+        array_keys($deanUserIds),
+        'Campus Director'
+    );
+
+    foreach (array_merge($supervisorComments, $deanComments, $directorComments) as $comment) {
+        $comments[] = $comment;
     }
 
     usort($comments, static function (array $left, array $right): int {
         return strcmp((string) ($right['updated_at'] ?? ''), (string) ($left['updated_at'] ?? ''));
     });
 
-    return array_slice($comments, 0, max(1, $limit));
+    $supervisorCommentCount = count($supervisorComments) + count($deanComments) + count($directorComments);
+
+    return array_slice($comments, 0, max(max(1, $limit), $supervisorCommentCount));
+}
+
+function individual_faculty_performance_add_comment(
+    array &$comments,
+    string $source,
+    string $authorLabel,
+    string $contextLabel,
+    string $text,
+    string $updatedAt
+): void {
+    $text = trim($text);
+    if ($text === '') {
+        return;
+    }
+
+    $comments[] = [
+        'source' => $source,
+        'author_label' => trim($authorLabel),
+        'context_label' => trim($contextLabel),
+        'text' => $text,
+        'updated_at' => trim($updatedAt),
+    ];
+}
+
+function individual_faculty_performance_role_evaluation_comments(
+    PDO $pdo,
+    string $evaluatorRole,
+    string $targetRole,
+    array $targetUserIds,
+    string $sourceLabel,
+    ?array &$evaluatorUserIds = null
+): array {
+    $targetUserIds = array_values(array_unique(array_filter(array_map('intval', $targetUserIds))));
+    if ($targetUserIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($targetUserIds), '?'));
+    $statement = $pdo->prepare(
+        "SELECT
+            ev.comment_text,
+            ev.updated_at,
+            ev.evaluator_user_management_id,
+            ev.evaluatee_user_management_id,
+            evaluator.full_name AS evaluator_name,
+            evaluator.email_address AS evaluator_email,
+            evaluatee.full_name AS evaluatee_name,
+            evaluatee.email_address AS evaluatee_email
+         FROM tbl_role_evaluations ev
+         LEFT JOIN tbl_user_management evaluator
+            ON evaluator.user_management_id = ev.evaluator_user_management_id
+         LEFT JOIN tbl_user_management evaluatee
+            ON evaluatee.user_management_id = ev.evaluatee_user_management_id
+         WHERE ev.evaluator_role = ?
+           AND ev.evaluatee_role = ?
+           AND ev.submission_status = 'submitted'
+           AND ev.evaluatee_user_management_id IN (" . $placeholders . ")
+         ORDER BY ev.updated_at DESC"
+    );
+    $statement->execute(array_merge([$evaluatorRole, $targetRole], $targetUserIds));
+
+    $comments = [];
+    foreach ($statement->fetchAll() as $row) {
+        $evaluatorUserId = (int) ($row['evaluator_user_management_id'] ?? 0);
+        if ($evaluatorUserIds !== null && $evaluatorUserId > 0) {
+            $evaluatorUserIds[$evaluatorUserId] = true;
+        }
+
+        individual_faculty_performance_add_comment(
+            $comments,
+            $sourceLabel,
+            role_evaluation_user_display_name([
+                'full_name' => (string) ($row['evaluator_name'] ?? ''),
+                'email_address' => (string) ($row['evaluator_email'] ?? ''),
+            ]),
+            role_evaluation_user_display_name([
+                'full_name' => (string) ($row['evaluatee_name'] ?? ''),
+                'email_address' => (string) ($row['evaluatee_email'] ?? ''),
+            ]),
+            (string) ($row['comment_text'] ?? ''),
+            (string) ($row['updated_at'] ?? '')
+        );
+    }
+
+    return $comments;
 }
 
 function individual_faculty_performance_format_mean($value): string

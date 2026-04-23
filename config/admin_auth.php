@@ -30,6 +30,36 @@ function is_program_chair_authenticated(): bool
     return administrator_profile() !== null && administrator_profile_role() === 'program_chair';
 }
 
+function is_dean_authenticated(): bool
+{
+    return administrator_profile() !== null && administrator_profile_role() === 'dean';
+}
+
+function is_director_authenticated(): bool
+{
+    return administrator_profile() !== null && administrator_profile_role() === 'director';
+}
+
+function is_role_evaluator_authenticated(): bool
+{
+    return is_dean_authenticated() || is_director_authenticated();
+}
+
+function administrator_role_landing_path(string $role): string
+{
+    $role = user_management_normalize_role($role);
+
+    if ($role === 'program_chair') {
+        return 'programchair/index.php';
+    }
+
+    if ($role === 'dean' || $role === 'director') {
+        return 'roleevaluation/index.php';
+    }
+
+    return 'administrator/index.php';
+}
+
 function require_admin_authentication(): void
 {
     if (administrator_profile() === null) {
@@ -44,8 +74,8 @@ function require_admin_authentication(): void
     }
 
     if (!is_admin_authenticated()) {
-        flash('error', 'Your account is assigned to the Program Chair module.');
-        redirect_to('programchair/index.php');
+        flash('error', 'Your account is assigned to the ' . user_management_role_label(administrator_profile_role()) . ' module.');
+        redirect_to(administrator_role_landing_path(administrator_profile_role()));
     }
 }
 
@@ -63,8 +93,27 @@ function require_program_chair_authentication(): void
     }
 
     if (!is_program_chair_authenticated()) {
-        flash('error', 'Your account is assigned to the Administrator module.');
-        redirect_to('administrator/index.php');
+        flash('error', 'Your account is assigned to the ' . user_management_role_label(administrator_profile_role()) . ' module.');
+        redirect_to(administrator_role_landing_path(administrator_profile_role()));
+    }
+}
+
+function require_role_evaluator_authentication(): void
+{
+    if (administrator_profile() === null) {
+        flash('error', 'Please sign in with your authorized Google account.');
+        redirect_to('auth/login.php');
+    }
+
+    if (administrator_profile_role() === '') {
+        logout_administrator();
+        flash('error', 'Please sign in again so your account role can be verified.');
+        redirect_to('auth/login.php');
+    }
+
+    if (!is_role_evaluator_authenticated()) {
+        flash('error', 'Your account is assigned to the ' . user_management_role_label(administrator_profile_role()) . ' module.');
+        redirect_to(administrator_role_landing_path(administrator_profile_role()));
     }
 }
 
