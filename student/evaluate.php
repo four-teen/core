@@ -3,21 +3,33 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config/bootstrap.php';
 
-require_student_authentication();
+$previewStudentId = isset($_GET['preview_student_id']) ? (int) $_GET['preview_student_id'] : 0;
+$isPreviewMode = $previewStudentId > 0;
+$administrator = null;
+$studentSession = null;
 
-$studentSession = student_profile();
-$studentId = (int) ($studentSession['student_id'] ?? 0);
+if ($isPreviewMode) {
+    require_admin_authentication();
+    $administrator = administrator_profile();
+    $studentId = $previewStudentId;
+} else {
+    require_student_authentication();
+    $studentSession = student_profile();
+    $studentId = (int) ($studentSession['student_id'] ?? 0);
+}
+
 $enrollmentId = isset($_GET['enrollment_id']) ? (int) $_GET['enrollment_id'] : (isset($_POST['enrollment_id']) ? (int) $_POST['enrollment_id'] : 0);
 
 if ($enrollmentId <= 0) {
     flash('error', 'Select a subject card first before opening the evaluation form.');
-    redirect_to('student/index.php');
+    redirect_to($isPreviewMode ? 'student/index.php?preview_student_id=' . (string) $studentId : 'student/index.php');
 }
 
 $context = null;
 $evaluation = null;
 $answers = [];
 $commentText = '';
+$instrumentVersion = evaluation_latest_instrument_version();
 $pageError = null;
 $noticeMessage = flash('notice');
 $errorMessage = flash('error');
@@ -28,17 +40,21 @@ try {
 
     if ($context === null) {
         flash('error', 'That enrolled subject could not be found for this student.');
-        redirect_to('student/index.php');
+        redirect_to($isPreviewMode ? 'student/index.php?preview_student_id=' . (string) $studentId : 'student/index.php');
     }
 
     if ((int) $context['faculty_id'] === 0) {
         flash('error', 'This subject does not have an assigned faculty record yet.');
-        redirect_to('student/index.php');
+        redirect_to($isPreviewMode ? 'student/index.php?preview_student_id=' . (string) $studentId : 'student/index.php');
     }
 
     $evaluation = find_evaluation_by_context($pdo, (int) $context['student_enrollment_id']);
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($isPreviewMode) {
+            throw new RuntimeException('Preview mode is read-only. Sign in as the student to save or submit an evaluation.');
+        }
+
         if (($evaluation['submission_status'] ?? '') === 'submitted') {
             flash('error', 'This evaluation has already been submitted and can no longer be changed.');
             redirect_to('student/evaluate.php?enrollment_id=' . (string) $enrollmentId);
@@ -47,18 +63,19 @@ try {
         $action = (string) ($_POST['action'] ?? '');
         $commentText = trim((string) ($_POST['comment_text'] ?? ''));
         $submittedAnswers = isset($_POST['answers']) && is_array($_POST['answers']) ? $_POST['answers'] : [];
-        $answers = evaluation_submitted_answer_values($submittedAnswers);
+        $instrumentVersion = evaluation_instrument_version_for($evaluation);
+        $answers = evaluation_submitted_answer_values($submittedAnswers, $instrumentVersion);
 
         if ($action !== 'save_draft' && $action !== 'submit_evaluation') {
             throw new RuntimeException('Invalid evaluation action.');
         }
 
-        if ($action === 'save_draft' && trim($commentText) === '' && !evaluation_has_any_answer($submittedAnswers)) {
+        if ($action === 'save_draft' && trim($commentText) === '' && !evaluation_has_any_answer($submittedAnswers, $instrumentVersion)) {
             throw new RuntimeException('Select at least one rating or add a comment before saving a draft.');
         }
 
         $status = $action === 'submit_evaluation' ? 'submitted' : 'draft';
-        normalize_evaluation_answers($submittedAnswers, $status === 'submitted');
+        normalize_evaluation_answers($submittedAnswers, $status === 'submitted', $instrumentVersion);
         $evaluation = create_or_get_evaluation($pdo, $context);
         $evaluation = save_evaluation_submission(
             $pdo,
@@ -80,6 +97,7 @@ try {
 
     if ($evaluation !== null) {
         $answers = find_evaluation_answers($pdo, (int) $evaluation['evaluation_id']);
+        $instrumentVersion = evaluation_instrument_version_for($evaluation, $answers);
         $commentText = (string) ($evaluation['comment_text'] ?? '');
     }
 } catch (Throwable $exception) {
@@ -90,9 +108,12 @@ try {
         : 'Unable to load the evaluation form right now. Please try again.');
 }
 
-$questionBank = evaluation_question_bank();
+$questionBank = evaluation_question_bank($instrumentVersion);
 $scaleOptions = evaluation_scale_options();
 $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? '') === 'submitted');
+$isReadOnly = $isSubmitted || $isPreviewMode;
+$evaluationFormAction = 'student/evaluate.php?enrollment_id=' . (string) $enrollmentId
+    . ($isPreviewMode ? '&preview_student_id=' . (string) $studentId : '');
 ?>
 <!DOCTYPE html>
 <html
@@ -143,9 +164,15 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
             </div>
             <div class="navbar-nav-right d-flex align-items-center justify-content-end w-100">
               <div class="d-flex align-items-center gap-3 portal-navbar-actions">
-                <a href="<?= h(base_url('student/index.php')) ?>" class="btn btn-outline-secondary btn-sm">
+                <?php if ($isPreviewMode): ?>
+                  <div class="text-end portal-navbar-user">
+                    <div class="fw-semibold">Preview by <?= h($administrator['name'] ?? 'Administrator') ?></div>
+                    <small class="text-muted portal-navbar-meta"><?= h($administrator['email'] ?? '') ?></small>
+                  </div>
+                <?php endif; ?>
+                <a href="<?= h(base_url($isPreviewMode ? 'student/index.php?preview_student_id=' . (string) $studentId : 'student/index.php')) ?>" class="btn btn-outline-secondary btn-sm">
                   <i class="bx bx-left-arrow-alt me-1"></i>
-                  Back to Student Portal
+                  <?= h($isPreviewMode ? 'Back to Student Preview' : 'Back to Student Portal') ?>
                 </a>
               </div>
             </div>
@@ -163,6 +190,12 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
 
               <?php if ($pageError !== null): ?>
                 <div class="alert alert-danger" role="alert"><?= h($pageError) ?></div>
+              <?php endif; ?>
+
+              <?php if ($isPreviewMode): ?>
+                <div class="alert alert-warning" role="alert">
+                  <strong>Preview Mode:</strong> You are viewing this evaluation as an administrator. Ratings and comments are read-only.
+                </div>
               <?php endif; ?>
 
               <?php if ($context !== null): ?>
@@ -218,15 +251,19 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
                   </div>
                 <?php endif; ?>
 
-                <form method="post" action="<?= h(base_url('student/evaluate.php?enrollment_id=' . (string) $enrollmentId)) ?>">
+                <form method="post" action="<?= h(base_url($evaluationFormAction)) ?>">
                   <input type="hidden" name="enrollment_id" value="<?= h((string) $enrollmentId) ?>" />
 
                   <div class="row g-4">
-                    <?php foreach ($questionBank as $category): ?>
+                    <?php foreach ($questionBank as $categoryIndex => $category): ?>
+                      <?php $categoryLetter = chr(65 + (int) $categoryIndex); ?>
                       <div class="col-12">
                         <div class="card">
                           <div class="card-header">
-                            <h5 class="mb-0"><?= h($category['title']) ?></h5>
+                            <h5 class="mb-0"><?= h($categoryLetter) ?>. <?= h($category['title']) ?></h5>
+                            <?php if (trim((string) ($category['description'] ?? '')) !== ''): ?>
+                              <small class="text-muted"><?= h((string) $category['description']) ?></small>
+                            <?php endif; ?>
                           </div>
                           <div class="card-body">
                             <div class="evaluation-question-list">
@@ -247,7 +284,7 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
                                           name="answers[<?= h($questionKey) ?>]"
                                           value="<?= h((string) $score) ?>"
                                           <?= $selectedValue === $score ? 'checked' : '' ?>
-                                          <?= $isSubmitted ? 'disabled' : '' ?>
+                                          <?= $isReadOnly ? 'disabled' : '' ?>
                                         />
                                         <span><?= h((string) $score) ?></span>
                                       </label>
@@ -273,13 +310,13 @@ $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? ''
                             name="comment_text"
                             rows="5"
                             placeholder="Share your comments about the faculty member here."
-                            <?= $isSubmitted ? 'readonly' : '' ?>
+                            <?= $isReadOnly ? 'readonly' : '' ?>
                           ><?= h($commentText) ?></textarea>
                         </div>
                       </div>
                     </div>
 
-                    <?php if (!$isSubmitted): ?>
+                    <?php if (!$isReadOnly): ?>
                       <div class="col-12">
                         <div class="d-flex flex-column flex-md-row gap-3 justify-content-end">
                           <button type="submit" name="action" value="save_draft" class="btn btn-outline-primary">

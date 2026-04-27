@@ -135,7 +135,7 @@ try {
             <div class="container-xxl flex-grow-1 container-p-y">
               <?php if ($isPreviewMode): ?>
                 <div class="alert alert-warning" role="alert">
-                  <strong>Preview Mode:</strong> You are viewing this student portal as an administrator. Evaluation actions are disabled in this view.
+                  <strong>Preview Mode:</strong> You are viewing this student portal as an administrator. Evaluation forms open in read-only mode.
                 </div>
               <?php endif; ?>
 
@@ -300,17 +300,13 @@ try {
                                   <?php endif; ?>
 
                                   <div class="mt-4">
-                                    <?php if ($isPreviewMode): ?>
-                                      <button type="button" class="btn btn-outline-secondary w-100" disabled>
-                                        Preview Only
-                                      </button>
-                                    <?php elseif (!$hasFaculty): ?>
+                                    <?php if (!$hasFaculty): ?>
                                       <button type="button" class="btn btn-outline-secondary w-100" disabled>
                                         No Faculty Assigned
                                       </button>
                                     <?php else: ?>
                                       <a
-                                        href="<?= h(base_url('student/evaluate.php?enrollment_id=' . (string) $row['student_enrollment_id'])) ?>"
+                                        href="<?= h(base_url('student/evaluate.php?enrollment_id=' . (string) $row['student_enrollment_id'] . ($isPreviewMode ? '&preview_student_id=' . (string) $targetStudentId : ''))) ?>"
                                         class="btn <?= h($buttonClass) ?> w-100"
                                       >
                                         <i class="bx <?= h($buttonIcon) ?> me-1"></i>

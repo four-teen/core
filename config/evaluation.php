@@ -5,29 +5,95 @@ function evaluation_scale_options(): array
 {
     return [
         5 => [
-            'label' => 'Outstanding',
-            'description' => 'The performance almost always exceeds the job requirements. The faculty is an exceptional role model.',
+            'label' => 'Always manifested',
+            'description' => 'Evident in nearly all relevant situations (91-100% of instances).',
         ],
         4 => [
-            'label' => 'Very Satisfactory',
-            'description' => 'The performance meets and often exceeds the job requirements.',
+            'label' => 'Often manifested',
+            'description' => 'Evident most of the time, with occasional lapses (61-90%).',
         ],
         3 => [
-            'label' => 'Satisfactory',
-            'description' => 'The performance meets and sometimes exceeds the job requirements.',
+            'label' => 'Sometimes manifested',
+            'description' => 'Evident about half the time (31-60%).',
         ],
         2 => [
-            'label' => 'Fair',
-            'description' => 'The performance needs some development to meet job requirements.',
+            'label' => 'Seldom manifested',
+            'description' => 'Rarely evident in relevant instances (11-30%).',
         ],
         1 => [
-            'label' => 'Poor',
-            'description' => 'The faculty fails to meet job requirements.',
+            'label' => 'Never/Rarely manifested',
+            'description' => 'Almost never evident, with only isolated cases (0-10%).',
         ],
     ];
 }
 
-function evaluation_question_bank(): array
+function evaluation_latest_instrument_version(): string
+{
+    return 'SET_2026_15_ITEM';
+}
+
+function evaluation_legacy_instrument_version(): string
+{
+    return 'SET_LEGACY_20_ITEM';
+}
+
+function evaluation_question_bank(?string $instrumentVersion = null): array
+{
+    $instrumentVersion = trim((string) ($instrumentVersion ?? evaluation_latest_instrument_version()));
+
+    if ($instrumentVersion === evaluation_legacy_instrument_version()) {
+        return evaluation_legacy_question_bank();
+    }
+
+    return evaluation_set_2026_question_bank();
+}
+
+function evaluation_set_2026_question_bank(): array
+{
+    return [
+        [
+            'key' => 'management_of_teaching_and_learning',
+            'code' => 'mtl',
+            'title' => 'MANAGEMENT OF TEACHING AND LEARNING',
+            'description' => 'Management of Teaching and Learning refers to the intentional and organized handling of classroom presence, clear communication of academic expectations, efficient use of time, and the purposeful use of student-centered activities that promote critical thinking, independent learning, reflection, decision-making, and continuous academic improvement through constructive feedback.',
+            'questions' => [
+                'Comes to class on time.',
+                'Explains learning outcomes, expectations, grading system, and various requirements of the subject/course.',
+                'Maximizes the allocated time/learning hours effectively.',
+                'Facilitates students to think critically and creatively by providing appropriate learning activities.',
+                'Guides students to learn on their own, reflect on new ideas and experiences, and make decisions in accomplishing given tasks.',
+                'Communicates constructive feedback to students for their academic growth.',
+            ],
+        ],
+        [
+            'key' => 'content_knowledge_pedagogy_and_technology',
+            'code' => 'ckpt',
+            'title' => 'CONTENT KNOWLEDGE, PEDAGOGY AND TECHNOLOGY',
+            'description' => 'Content Knowledge, Pedagogy, and Technology refer to a teacher\'s ability to demonstrate a strong grasp of subject matter, present complex concepts in a clear and accessible way, relate content to real-world contexts and current developments, engage students through appropriate instructional strategies and digital tools, and apply assessment methods aligned with intended learning outcomes.',
+            'questions' => [
+                'Demonstrates extensive and broad knowledge of the subject/course.',
+                'Simplifies complex ideas in the lesson for ease of understanding.',
+                'Relates the subject matter to contemporary issues and developments in the discipline and/or daily life activities.',
+                'Promotes active learning and student engagement by using appropriate teaching and learning resources including ICT tools and platforms.',
+                'Uses appropriate assessments (projects, exams, quizzes, assignments, etc.) aligned with the learning outcomes.',
+            ],
+        ],
+        [
+            'key' => 'commitment_and_transparency',
+            'code' => 'ct',
+            'title' => 'COMMITMENT AND TRANSPARENCY',
+            'description' => 'Commitment and Transparency refer to the teacher\'s consistent dedication to supporting student learning by acknowledging learner diversity, offering timely academic support and feedback, and upholding fairness and accountability through the use of clear and openly communicated performance criteria.',
+            'questions' => [
+                'Recognizes and values the unique diversity and individual differences among students.',
+                'Assists students with their learning challenges during consultation hours.',
+                'Provides immediate feedback on student outputs and performance.',
+                'Provides transparent and clear criteria in rating student\'s performance.',
+            ],
+        ],
+    ];
+}
+
+function evaluation_legacy_question_bank(): array
 {
     return [
         [
@@ -81,6 +147,24 @@ function evaluation_question_bank(): array
     ];
 }
 
+function evaluation_all_question_categories(): array
+{
+    $categories = [];
+
+    foreach ([evaluation_latest_instrument_version(), evaluation_legacy_instrument_version()] as $instrumentVersion) {
+        foreach (evaluation_question_bank($instrumentVersion) as $category) {
+            $categoryKey = (string) ($category['key'] ?? '');
+            if ($categoryKey === '' || isset($categories[$categoryKey])) {
+                continue;
+            }
+
+            $categories[$categoryKey] = $category;
+        }
+    }
+
+    return $categories;
+}
+
 function evaluation_question_key(array $category, int $position): string
 {
     $code = strtolower(trim((string) ($category['code'] ?? $category['key'] ?? 'q')));
@@ -116,14 +200,39 @@ function evaluation_answer_value(array $answers, array $category, int $position)
     return 0;
 }
 
-function evaluation_total_question_count(): int
+function evaluation_total_question_count(?string $instrumentVersion = null): int
 {
     $count = 0;
-    foreach (evaluation_question_bank() as $category) {
+    foreach (evaluation_question_bank($instrumentVersion) as $category) {
         $count += count($category['questions']);
     }
 
     return $count;
+}
+
+function evaluation_instrument_version_for(?array $evaluation, array $answers = []): string
+{
+    $savedVersion = trim((string) ($evaluation['instrument_version'] ?? ''));
+    if ($savedVersion !== '') {
+        return $savedVersion;
+    }
+
+    if ($answers !== []) {
+        foreach (array_keys($answers) as $questionKey) {
+            if (preg_match('/^(mtl|ckpt|ct)_\d+$/', (string) $questionKey)) {
+                return evaluation_latest_instrument_version();
+            }
+        }
+
+        return evaluation_legacy_instrument_version();
+    }
+
+    $questionCount = (int) ($evaluation['question_count'] ?? 0);
+    if ($questionCount >= 20) {
+        return evaluation_legacy_instrument_version();
+    }
+
+    return evaluation_latest_instrument_version();
 }
 
 function evaluation_term_label($academicYearLabel, $semester): string
@@ -167,6 +276,13 @@ function ensure_evaluation_subject_scope(PDO $pdo): void
         );
     }
 
+    if (!isset($columns['instrument_version'])) {
+        $pdo->exec(
+            "ALTER TABLE tbl_student_faculty_evaluations
+             ADD COLUMN instrument_version VARCHAR(40) NOT NULL DEFAULT '' AFTER subject_summary"
+        );
+    }
+
     $indexes = evaluation_table_indexes($pdo);
     if (isset($indexes['uniq_student_faculty_term'])) {
         $pdo->exec(
@@ -196,6 +312,59 @@ function ensure_evaluation_subject_scope(PDO $pdo): void
     }
 
     $ensured = true;
+
+    evaluation_recalculate_saved_summaries($pdo);
+}
+
+function evaluation_recalculate_saved_summaries(PDO $pdo): void
+{
+    static $synced = false;
+
+    if ($synced) {
+        return;
+    }
+
+    $pdo->exec(
+        "UPDATE tbl_student_faculty_evaluations ev
+         INNER JOIN (
+            SELECT
+                evaluation_id,
+                COUNT(*) AS question_count,
+                COALESCE(SUM(rating), 0) AS total_score,
+                ROUND(AVG(rating), 2) AS average_rating
+            FROM tbl_student_faculty_evaluation_answers
+            WHERE rating BETWEEN 1 AND 5
+            GROUP BY evaluation_id
+         ) ans ON ans.evaluation_id = ev.evaluation_id
+         SET ev.question_count = ans.question_count,
+             ev.total_score = ans.total_score,
+             ev.average_rating = ans.average_rating
+         WHERE ev.question_count <> ans.question_count
+            OR ev.total_score <> ans.total_score
+            OR ev.average_rating <> ans.average_rating"
+    );
+
+    $pdo->exec(
+        "UPDATE tbl_student_faculty_evaluations ev
+         INNER JOIN (
+            SELECT
+                evaluation_id,
+                COUNT(*) AS answer_count,
+                SUM(CASE WHEN category_key IN ('commitment', 'knowledge_of_subject_matter', 'teaching_for_independent_learning', 'management_of_learning') THEN 1 ELSE 0 END) AS legacy_answer_count,
+                SUM(CASE WHEN category_key IN ('management_of_teaching_and_learning', 'content_knowledge_pedagogy_and_technology', 'commitment_and_transparency') THEN 1 ELSE 0 END) AS latest_answer_count
+            FROM tbl_student_faculty_evaluation_answers
+            GROUP BY evaluation_id
+         ) ans ON ans.evaluation_id = ev.evaluation_id
+         SET ev.instrument_version = CASE
+             WHEN ans.legacy_answer_count > 0 THEN '" . evaluation_legacy_instrument_version() . "'
+             WHEN ans.latest_answer_count > 0 THEN '" . evaluation_latest_instrument_version() . "'
+             WHEN ans.answer_count >= 20 THEN '" . evaluation_legacy_instrument_version() . "'
+             ELSE '" . evaluation_latest_instrument_version() . "'
+         END
+         WHERE ev.instrument_version = ''"
+    );
+
+    $synced = true;
 }
 
 function evaluation_table_columns(PDO $pdo): array
@@ -408,6 +577,7 @@ function create_or_get_evaluation(PDO $pdo, array $context): array
                 student_number,
                 term_label,
                 subject_summary,
+                instrument_version,
                 comment_text,
                 question_count,
                 total_score,
@@ -427,6 +597,7 @@ function create_or_get_evaluation(PDO $pdo, array $context): array
                 :student_number,
                 :term_label,
                 :subject_summary,
+                :instrument_version,
                 '',
                 0,
                 0,
@@ -449,6 +620,7 @@ function create_or_get_evaluation(PDO $pdo, array $context): array
         'student_number' => $context['student_number'],
         'term_label' => $context['term_label'],
         'subject_summary' => $context['subject_summary'],
+        'instrument_version' => evaluation_latest_instrument_version(),
         'evaluation_token' => bin2hex(random_bytes(16)),
     ]);
 
@@ -462,12 +634,12 @@ function create_or_get_evaluation(PDO $pdo, array $context): array
     return $created;
 }
 
-function normalize_evaluation_answers(array $submittedAnswers, bool $requireComplete = true): array
+function normalize_evaluation_answers(array $submittedAnswers, bool $requireComplete = true, ?string $instrumentVersion = null): array
 {
     $normalized = [];
     $validScores = array_keys(evaluation_scale_options());
 
-    foreach (evaluation_question_bank() as $category) {
+    foreach (evaluation_question_bank($instrumentVersion) as $category) {
         $position = 1;
         foreach ($category['questions'] as $questionText) {
             $questionKey = evaluation_question_key($category, $position);
@@ -498,9 +670,9 @@ function normalize_evaluation_answers(array $submittedAnswers, bool $requireComp
     return $normalized;
 }
 
-function evaluation_has_any_answer(array $submittedAnswers): bool
+function evaluation_has_any_answer(array $submittedAnswers, ?string $instrumentVersion = null): bool
 {
-    foreach (evaluation_question_bank() as $category) {
+    foreach (evaluation_question_bank($instrumentVersion) as $category) {
         $position = 1;
         foreach ($category['questions'] as $questionText) {
             $questionKey = evaluation_question_key($category, $position);
@@ -516,12 +688,12 @@ function evaluation_has_any_answer(array $submittedAnswers): bool
     return false;
 }
 
-function evaluation_submitted_answer_values(array $submittedAnswers): array
+function evaluation_submitted_answer_values(array $submittedAnswers, ?string $instrumentVersion = null): array
 {
     $answers = [];
     $validScores = array_keys(evaluation_scale_options());
 
-    foreach (evaluation_question_bank() as $category) {
+    foreach (evaluation_question_bank($instrumentVersion) as $category) {
         $position = 1;
         foreach ($category['questions'] as $questionText) {
             $questionKey = evaluation_question_key($category, $position);
@@ -546,7 +718,8 @@ function save_evaluation_submission(PDO $pdo, array $evaluation, array $context,
     ensure_evaluation_subject_scope($pdo);
 
     $isSubmitted = $status === 'submitted';
-    $normalizedAnswers = normalize_evaluation_answers($submittedAnswers, $isSubmitted);
+    $instrumentVersion = evaluation_instrument_version_for($evaluation);
+    $normalizedAnswers = normalize_evaluation_answers($submittedAnswers, $isSubmitted, $instrumentVersion);
     $totalScore = 0;
     foreach ($normalizedAnswers as $answer) {
         $totalScore += (int) $answer['rating'];
@@ -566,6 +739,7 @@ function save_evaluation_submission(PDO $pdo, array $evaluation, array $context,
                           student_number = :student_number,
                           term_label = :term_label,
                           subject_summary = :subject_summary,
+                          instrument_version = :instrument_version,
                           comment_text = :comment_text,
                           question_count = :question_count,
                           total_score = :total_score,
@@ -586,6 +760,7 @@ function save_evaluation_submission(PDO $pdo, array $evaluation, array $context,
             'student_number' => $context['student_number'],
             'term_label' => $context['term_label'],
             'subject_summary' => $context['subject_summary'],
+            'instrument_version' => $instrumentVersion,
             'comment_text' => trim($commentText),
             'question_count' => $questionCount,
             'total_score' => $totalScore,

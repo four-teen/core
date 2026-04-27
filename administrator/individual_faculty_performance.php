@@ -145,6 +145,9 @@ require __DIR__ . '/_start.php';
       'knowledge_of_subject_matter' => 'ifpe-cell-knowledge',
       'teaching_for_independent_learning' => 'ifpe-cell-teaching',
       'management_of_learning' => 'ifpe-cell-management',
+      'management_of_teaching_and_learning' => 'ifpe-cell-management',
+      'content_knowledge_pedagogy_and_technology' => 'ifpe-cell-knowledge',
+      'commitment_and_transparency' => 'ifpe-cell-commitment',
   ];
   ?>
 
@@ -248,20 +251,25 @@ require __DIR__ . '/_start.php';
 
         <table class="ifpe-official-table ifpe-rating-table">
           <colgroup>
-            <col style="width: 19.45%;" />
-            <col style="width: 22.22%;" />
-            <col style="width: 26.38%;" />
-            <col style="width: 18.06%;" />
-            <col style="width: 13.89%;" />
+            <?php $studentColumnWidth = 100 / max(1, count($studentCategories) + 1); ?>
+            <?php foreach ($studentCategories as $category): ?>
+              <col style="width: <?= h(number_format($studentColumnWidth, 2)) ?>%;" />
+            <?php endforeach; ?>
+            <col style="width: <?= h(number_format($studentColumnWidth, 2)) ?>%;" />
           </colgroup>
           <tbody>
             <tr>
-              <th colspan="5" class="ifpe-section-title">STUDENT RATING</th>
+              <th colspan="<?= h((string) (count($studentCategories) + 1)) ?>" class="ifpe-section-title">STUDENT RATING</th>
             </tr>
             <tr>
               <?php foreach ($studentCategories as $category): ?>
                 <?php $categoryClass = $categoryClassMap[(string) ($category['key'] ?? '')] ?? ''; ?>
-                <th class="<?= h($categoryClass) ?>"><?= h((string) $category['title']) ?> (<?= h(format_number($category['weight'])) ?>%)</th>
+                <th class="<?= h($categoryClass) ?>">
+                  <?= h((string) $category['title']) ?>
+                  <?php if (($category['weight'] ?? null) !== null): ?>
+                    (<?= h(format_number($category['weight'])) ?>%)
+                  <?php endif; ?>
+                </th>
               <?php endforeach; ?>
               <th class="ifpe-cell-overall">Overall Mean</th>
             </tr>
@@ -283,20 +291,25 @@ require __DIR__ . '/_start.php';
 
         <table class="ifpe-official-table ifpe-rating-table">
           <colgroup>
-            <col style="width: 19.45%;" />
-            <col style="width: 22.22%;" />
-            <col style="width: 26.38%;" />
-            <col style="width: 18.06%;" />
-            <col style="width: 13.89%;" />
+            <?php $supervisorColumnWidth = 100 / max(1, count($supervisorCategories) + 1); ?>
+            <?php foreach ($supervisorCategories as $category): ?>
+              <col style="width: <?= h(number_format($supervisorColumnWidth, 2)) ?>%;" />
+            <?php endforeach; ?>
+            <col style="width: <?= h(number_format($supervisorColumnWidth, 2)) ?>%;" />
           </colgroup>
           <tbody>
             <tr>
-              <th colspan="5" class="ifpe-section-title">SUPERVISOR RATING</th>
+              <th colspan="<?= h((string) (count($supervisorCategories) + 1)) ?>" class="ifpe-section-title">SUPERVISOR RATING</th>
             </tr>
             <tr>
               <?php foreach ($supervisorCategories as $category): ?>
                 <?php $categoryClass = $categoryClassMap[(string) ($category['key'] ?? '')] ?? ''; ?>
-                <th class="<?= h($categoryClass) ?>"><?= h((string) $category['title']) ?> (<?= h(format_number($category['weight'])) ?>%)</th>
+                <th class="<?= h($categoryClass) ?>">
+                  <?= h((string) $category['title']) ?>
+                  <?php if (($category['weight'] ?? null) !== null): ?>
+                    (<?= h(format_number($category['weight'])) ?>%)
+                  <?php endif; ?>
+                </th>
               <?php endforeach; ?>
               <th class="ifpe-cell-overall">Overall Mean</th>
             </tr>
@@ -338,7 +351,11 @@ require __DIR__ . '/_start.php';
         <div class="ifpe-signature-grid">
           <div class="ifpe-signature-block ifpe-signature-block-evaluated">
             <p>Evaluated by:</p>
-            <strong>Chairperson, Faculty Performance Evaluation</strong>
+            <strong class="ifpe-signature-name">
+              <?= h(trim((string) ($report['evaluated_by_name'] ?? '')) !== '' ? (string) $report['evaluated_by_name'] : ' ') ?>
+            </strong>
+            <div class="ifpe-signature-line"></div>
+            <span class="ifpe-signature-role">Chairperson, Faculty Performance Evaluation</span>
           </div>
           <div class="ifpe-signature-block">
             <p>Recommending Approval:</p>

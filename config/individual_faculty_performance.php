@@ -4,23 +4,98 @@ declare(strict_types=1);
 function individual_faculty_performance_categories(): array
 {
     return [
-        'commitment' => [
-            'title' => 'COMMITMENT',
-            'weight' => 20,
+        'management_of_teaching_and_learning' => [
+            'title' => 'MANAGEMENT OF TEACHING AND LEARNING',
+            'weight' => null,
         ],
-        'knowledge_of_subject_matter' => [
-            'title' => 'KNOWLEDGE OF SUBJECT MATTER',
-            'weight' => 30,
+        'content_knowledge_pedagogy_and_technology' => [
+            'title' => 'CONTENT KNOWLEDGE, PEDAGOGY AND TECHNOLOGY',
+            'weight' => null,
         ],
-        'teaching_for_independent_learning' => [
-            'title' => 'TEACHING FOR INDEPENDENT LEARNING',
-            'weight' => 30,
-        ],
-        'management_of_learning' => [
-            'title' => 'MANAGEMENT OF LEARNING',
-            'weight' => 20,
+        'commitment_and_transparency' => [
+            'title' => 'COMMITMENT AND TRANSPARENCY',
+            'weight' => null,
         ],
     ];
+}
+
+function individual_faculty_performance_student_categories(array $categoryRows): array
+{
+    return individual_faculty_performance_categories();
+}
+
+function individual_faculty_performance_normalize_category_key(string $categoryKey): string
+{
+    $categoryKey = trim($categoryKey);
+
+    if (isset(individual_faculty_performance_categories()[$categoryKey])) {
+        return $categoryKey;
+    }
+
+    $legacyMap = [
+        'management_of_learning' => 'management_of_teaching_and_learning',
+        'teaching_for_independent_learning' => 'management_of_teaching_and_learning',
+        'knowledge_of_subject_matter' => 'content_knowledge_pedagogy_and_technology',
+        'commitment' => 'commitment_and_transparency',
+    ];
+
+    return $legacyMap[$categoryKey] ?? '';
+}
+
+function individual_faculty_performance_category_title(string $categoryKey): string
+{
+    return (string) (individual_faculty_performance_categories()[$categoryKey]['title'] ?? $categoryKey);
+}
+
+function individual_faculty_performance_normalize_category_rows(array $rows): array
+{
+    $categoryTotals = [];
+
+    foreach ($rows as $row) {
+        $categoryKey = individual_faculty_performance_normalize_category_key((string) ($row['category_key'] ?? ''));
+        if ($categoryKey === '') {
+            continue;
+        }
+
+        if (!isset($categoryTotals[$categoryKey])) {
+            $categoryTotals[$categoryKey] = [
+                'category_key' => $categoryKey,
+                'category_title' => individual_faculty_performance_category_title($categoryKey),
+                'weighted_total' => 0.0,
+                'response_count' => 0,
+                'evaluation_count' => 0,
+            ];
+        }
+
+        $responseCount = (int) ($row['response_count'] ?? 0);
+        $evaluationCount = (int) ($row['evaluation_count'] ?? 0);
+        $meanRating = $row['mean_rating'] !== null ? (float) $row['mean_rating'] : null;
+
+        if ($meanRating !== null && $responseCount > 0) {
+            $categoryTotals[$categoryKey]['weighted_total'] += $meanRating * $responseCount;
+            $categoryTotals[$categoryKey]['response_count'] += $responseCount;
+        }
+
+        $categoryTotals[$categoryKey]['evaluation_count'] += $evaluationCount;
+    }
+
+    $normalizedRows = [];
+    foreach ($categoryTotals as $categoryTotal) {
+        $responseCount = (int) ($categoryTotal['response_count'] ?? 0);
+        if ($responseCount <= 0) {
+            continue;
+        }
+
+        $normalizedRows[] = [
+            'category_key' => (string) $categoryTotal['category_key'],
+            'category_title' => (string) $categoryTotal['category_title'],
+            'mean_rating' => round(((float) $categoryTotal['weighted_total']) / $responseCount, 2),
+            'response_count' => $responseCount,
+            'evaluation_count' => (int) $categoryTotal['evaluation_count'],
+        ];
+    }
+
+    return $normalizedRows;
 }
 
 function individual_faculty_performance_faculty_name_from_row(array $row): string
@@ -185,6 +260,7 @@ function individual_faculty_performance_report(PDO $pdo, int $facultyId, ?array 
         'current_percentage' => $currentPercentage,
         'is_complete' => $isComplete,
         'rating_label' => individual_faculty_performance_rating_label($currentPercentage, $isComplete),
+        'evaluated_by_name' => individual_faculty_performance_program_chair_evaluator_name($pdo, $facultyId),
         'comments' => individual_faculty_performance_comments($pdo, $facultyId, $termFilter, 12, $faculty),
     ];
 }
@@ -208,6 +284,33 @@ function individual_faculty_performance_faculty(PDO $pdo, int $facultyId): ?arra
     $faculty['faculty_name'] = individual_faculty_performance_faculty_name_from_row($faculty);
 
     return $faculty;
+}
+
+function individual_faculty_performance_program_chair_evaluator_name(PDO $pdo, int $facultyId): string
+{
+    $statement = $pdo->prepare(
+        "SELECT um.full_name, um.email_address
+         FROM tbl_program_chair_faculty_evaluations ev
+         LEFT JOIN tbl_user_management um
+            ON um.user_management_id = ev.program_chair_user_management_id
+         WHERE ev.faculty_id = :faculty_id
+           AND ev.submission_status = 'submitted'
+         ORDER BY
+            COALESCE(ev.final_submitted_at, ev.updated_at, ev.completed_at, ev.created_at) DESC,
+            ev.program_chair_evaluation_id DESC
+         LIMIT 1"
+    );
+    $statement->execute(['faculty_id' => $facultyId]);
+
+    $row = $statement->fetch();
+    if (!$row) {
+        return '';
+    }
+
+    return role_evaluation_user_display_name([
+        'full_name' => (string) ($row['full_name'] ?? ''),
+        'email_address' => (string) ($row['email_address'] ?? ''),
+    ]);
 }
 
 function individual_faculty_performance_student_section(PDO $pdo, int $facultyId, ?array $termFilter): array
@@ -257,7 +360,8 @@ function individual_faculty_performance_student_section(PDO $pdo, int $facultyId
         'Students Rating',
         60,
         $summary,
-        $categoryStatement->fetchAll()
+        individual_faculty_performance_normalize_category_rows($categoryStatement->fetchAll()),
+        true
     );
 }
 
@@ -278,7 +382,8 @@ function individual_faculty_performance_supervisor_section(PDO $pdo, int $facult
         'Supervisors Rating',
         40,
         $summary,
-        $categories
+        $categories,
+        true
     );
 }
 
@@ -300,6 +405,7 @@ function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int 
             ev.average_rating,
             ev.updated_at,
             ans.category_key,
+            ans.category_title,
             ans.rating
          FROM tbl_program_chair_faculty_evaluations ev
          LEFT JOIN tbl_program_chair_faculty_evaluation_answers ans
@@ -332,13 +438,14 @@ function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int 
 
         $lastUpdated = individual_faculty_performance_latest_datetime($lastUpdated, (string) ($row['updated_at'] ?? ''));
 
-        $categoryKey = (string) ($row['category_key'] ?? '');
+        $categoryKey = individual_faculty_performance_normalize_category_key((string) ($row['category_key'] ?? ''));
         $rating = (int) ($row['rating'] ?? 0);
-        if (isset(individual_faculty_performance_categories()[$categoryKey]) && $rating >= 1 && $rating <= 5) {
+        if ($categoryKey !== '' && $rating >= 1 && $rating <= 5) {
             individual_faculty_performance_add_supervisor_category_rating(
                 $categoryTotals,
                 $categoryKey,
                 $rating,
+                individual_faculty_performance_category_title($categoryKey),
                 $sourceKey
             );
         }
@@ -425,6 +532,7 @@ function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int 
                     $categoryTotals,
                     $categoryKey,
                     $rating,
+                    individual_faculty_performance_category_title($categoryKey),
                     $sourceKey
                 );
             }
@@ -432,11 +540,7 @@ function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int 
     }
 
     $categoryRows = [];
-    foreach (individual_faculty_performance_categories() as $categoryKey => $category) {
-        if (!isset($categoryTotals[$categoryKey])) {
-            continue;
-        }
-
+    foreach ($categoryTotals as $categoryKey => $categoryTotal) {
         $categoryTotal = $categoryTotals[$categoryKey];
         $responseCount = (int) ($categoryTotal['response_count'] ?? 0);
         if ($responseCount <= 0) {
@@ -445,7 +549,7 @@ function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int 
 
         $categoryRows[] = [
             'category_key' => $categoryKey,
-            'category_title' => (string) $category['title'],
+            'category_title' => (string) ($categoryTotal['category_title'] ?? $categoryKey),
             'mean_rating' => round(((float) $categoryTotal['total']) / $responseCount, 2),
             'response_count' => $responseCount,
             'evaluation_count' => count($categoryTotal['evaluation_ids'] ?? []),
@@ -465,10 +569,17 @@ function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int 
     return $categoryRows;
 }
 
-function individual_faculty_performance_add_supervisor_category_rating(array &$categoryTotals, string $categoryKey, int $rating, string $sourceKey): void
+function individual_faculty_performance_add_supervisor_category_rating(
+    array &$categoryTotals,
+    string $categoryKey,
+    int $rating,
+    string $categoryTitle,
+    string $sourceKey
+): void
 {
     if (!isset($categoryTotals[$categoryKey])) {
         $categoryTotals[$categoryKey] = [
+            'category_title' => $categoryTitle,
             'total' => 0,
             'response_count' => 0,
             'evaluation_ids' => [],
@@ -482,20 +593,16 @@ function individual_faculty_performance_add_supervisor_category_rating(array &$c
 
 function individual_faculty_performance_role_category_key(string $categoryKey): string
 {
-    $categoryKey = trim($categoryKey);
-
-    if (isset(individual_faculty_performance_categories()[$categoryKey])) {
-        return $categoryKey;
-    }
+    $normalizedCategoryKey = individual_faculty_performance_normalize_category_key($categoryKey);
 
     $map = [
-        'professional_commitment' => 'commitment',
-        'leadership_and_supervision' => 'management_of_learning',
-        'program_management' => 'teaching_for_independent_learning',
-        'collaboration_and_service' => 'knowledge_of_subject_matter',
+        'professional_commitment' => 'commitment_and_transparency',
+        'leadership_and_supervision' => 'management_of_teaching_and_learning',
+        'program_management' => 'management_of_teaching_and_learning',
+        'collaboration_and_service' => 'content_knowledge_pedagogy_and_technology',
     ];
 
-    return $map[$categoryKey] ?? '';
+    return $normalizedCategoryKey !== '' ? $normalizedCategoryKey : ($map[trim($categoryKey)] ?? '');
 }
 
 function individual_faculty_performance_latest_datetime(string $current, string $candidate): string
@@ -617,24 +724,34 @@ function individual_faculty_performance_name_tokens(string $name): array
     return array_keys($tokens);
 }
 
-function individual_faculty_performance_build_rating_section(string $label, float $sourceWeight, array $summary, array $categoryRows): array
+function individual_faculty_performance_build_rating_section(
+    string $label,
+    float $sourceWeight,
+    array $summary,
+    array $categoryRows,
+    bool $useSavedStudentCategories = false
+): array
 {
     $categoryByKey = [];
     foreach ($categoryRows as $row) {
         $categoryByKey[(string) ($row['category_key'] ?? '')] = $row;
     }
 
+    $categoryCatalog = $useSavedStudentCategories
+        ? individual_faculty_performance_student_categories($categoryRows)
+        : individual_faculty_performance_categories();
+
     $categories = [];
     $weightedTotal = 0.0;
     $availableWeight = 0.0;
     $responseCount = 0;
 
-    foreach (individual_faculty_performance_categories() as $key => $category) {
+    foreach ($categoryCatalog as $key => $category) {
         $row = $categoryByKey[$key] ?? null;
         $mean = $row !== null && $row['mean_rating'] !== null ? (float) $row['mean_rating'] : null;
-        $weight = (float) $category['weight'];
+        $weight = $category['weight'] !== null ? (float) $category['weight'] : null;
 
-        if ($mean !== null) {
+        if ($mean !== null && $weight !== null) {
             $weightedTotal += $mean * ($weight / 100);
             $availableWeight += $weight / 100;
         }
@@ -651,7 +768,9 @@ function individual_faculty_performance_build_rating_section(string $label, floa
     }
 
     $overallMean = null;
-    if ($availableWeight > 0) {
+    if ($useSavedStudentCategories && ($summary['stored_average_rating'] ?? null) !== null && (float) $summary['stored_average_rating'] > 0) {
+        $overallMean = round((float) $summary['stored_average_rating'], 2);
+    } elseif ($availableWeight > 0) {
         $overallMean = round($weightedTotal / $availableWeight, 2);
     } elseif (($summary['stored_average_rating'] ?? null) !== null && (float) $summary['stored_average_rating'] > 0) {
         $overallMean = round((float) $summary['stored_average_rating'], 2);

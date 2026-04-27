@@ -5,29 +5,113 @@ function program_chair_evaluation_scale_options(): array
 {
     return [
         5 => [
-            'label' => 'Outstanding',
-            'description' => 'Performance almost always exceeds the job requirements.',
+            'label' => 'Always manifested',
+            'description' => 'Evident in nearly all relevant situations (91-100% of instances).',
         ],
         4 => [
-            'label' => 'Very Satisfactory',
-            'description' => 'Performance meets and often exceeds the job requirements.',
+            'label' => 'Often manifested',
+            'description' => 'Evident most of the time, with occasional lapses (61-90%).',
         ],
         3 => [
-            'label' => 'Satisfactory',
-            'description' => 'Performance meets and sometimes exceeds the job requirements.',
+            'label' => 'Sometimes manifested',
+            'description' => 'Evident about half the time (31-60%).',
         ],
         2 => [
-            'label' => 'Fair',
-            'description' => 'Performance needs development to meet job requirements.',
+            'label' => 'Seldom manifested',
+            'description' => 'Rarely evident in relevant instances (11-30%).',
         ],
         1 => [
-            'label' => 'Poor',
-            'description' => 'Performance fails to meet job requirements.',
+            'label' => 'Never/Rarely manifested',
+            'description' => 'Almost never evident, with only isolated cases (0-10%).',
         ],
     ];
 }
 
-function program_chair_evaluation_question_bank(): array
+function program_chair_latest_instrument_version(): string
+{
+    return 'SEF_2026_15_ITEM';
+}
+
+function program_chair_legacy_instrument_version(): string
+{
+    return 'SEF_LEGACY_20_ITEM';
+}
+
+function program_chair_evaluation_question_bank(?string $instrumentVersion = null): array
+{
+    $instrumentVersion = trim((string) ($instrumentVersion ?? program_chair_latest_instrument_version()));
+
+    if ($instrumentVersion === program_chair_legacy_instrument_version()) {
+        return program_chair_legacy_evaluation_question_bank();
+    }
+
+    return program_chair_sef_2026_question_bank();
+}
+
+function program_chair_sef_2026_question_bank(): array
+{
+    return [
+        [
+            'key' => 'management_of_teaching_and_learning',
+            'code' => 'mtl',
+            'title' => 'MANAGEMENT OF TEACHING AND LEARNING',
+            'questions' => [
+                'Comes to class on time.',
+                'Submits updated syllabus, grade sheets, and other required reports on time.',
+                'Maximizes the allocated time/learning hours effectively.',
+                'Provides appropriate learning activities that facilitate critical thinking and creativity of students.',
+                'Guides students to learn on their own, reflect on new ideas and experiences, and make decisions in accomplishing given tasks.',
+                'Communicates constructive feedback to students for their academic growth.',
+            ],
+            'verification' => [
+                1 => ['Daily Time Record', 'Faculty schedule and timetable', 'Informal interview with students'],
+                2 => ['Documents submission log', 'Submission receipts or acknowledgment emails'],
+                3 => ['Class schedules and timetables', 'LMS logs', 'Informal interview with students'],
+                4 => ['Course syllabus', 'Learning plan', 'Classroom observation', 'Informal interview with students', 'LMS logs'],
+                5 => ['Course syllabus', 'Learning plan', 'Student work samples', 'Classroom observation', 'LMS logs', 'Informal interview with students', 'Faculty consultation log'],
+                6 => ['Graded student work with feedback', 'Faculty consultation log', 'Informal interview with students', 'Emails or official correspondence', 'LMS logs'],
+            ],
+        ],
+        [
+            'key' => 'content_knowledge_pedagogy_and_technology',
+            'code' => 'ckpt',
+            'title' => 'CONTENT KNOWLEDGE, PEDAGOGY AND TECHNOLOGY',
+            'questions' => [
+                'Demonstrates extensive and broad knowledge of the subject/course.',
+                'Simplifies complex ideas in the lesson for ease of understanding.',
+                'Integrates contemporary issues in the discipline and/or daily life activities in the syllabus.',
+                'Promotes active learning and student engagement by using appropriate teaching and learning resources including ICT tools and platforms.',
+                'Uses appropriate assessments (projects, exams, quizzes, assignments, etc.) aligned with the learning outcomes.',
+            ],
+            'verification' => [
+                1 => ['Course syllabus', 'Learning plan', 'Instructional materials developed by the faculty', 'Informal interview with students', 'Mentorship or thesis/dissertation advisory records'],
+                2 => ['Learning plan', 'Course syllabus', 'Classroom observation', 'Informal interview with students', 'Lecture notes and presentations', 'LMS logs'],
+                3 => ['Course syllabus', 'Learning plan', 'Classroom observation', 'Informal interview with students', 'LMS logs', 'Instructional materials developed by the faculty', 'Participation in conferences, webinars, and training'],
+                4 => ['Course syllabus', 'Learning plan', 'Classroom observation', 'Informal interview with students', 'LMS logs', 'Multimedia lecture materials', 'Student work samples'],
+                5 => ['Course syllabus', 'Learning plan', 'Informal interview with students', 'Assessment tools and rubrics', 'Exam and quiz samples', 'Graded student work samples', 'LMS records'],
+            ],
+        ],
+        [
+            'key' => 'commitment_and_transparency',
+            'code' => 'ct',
+            'title' => 'COMMITMENT AND TRANSPARENCY',
+            'questions' => [
+                'Recognizes and values the unique diversity and individual differences among students.',
+                'Assists students with their learning challenges during consultation hours.',
+                'Provides immediate feedback on student outputs and performance.',
+                'Provides transparent and clear criteria in rating student\'s performance.',
+            ],
+            'verification' => [
+                1 => ['Course syllabus', 'Learning plan', 'Instructional materials developed by the faculty', 'Classroom observation', 'Informal interview with students'],
+                2 => ['Course syllabus', 'Faculty consultation log', 'Advisory records', 'SMS logs', 'Emails or official correspondence'],
+                3 => ['Graded student work samples', 'Assessment tools and rubrics', 'Informal interview with students', 'LMS logs', 'Emails or official correspondence', 'Faculty consultation log', 'Advising reports'],
+                4 => ['Course syllabus', 'Assessment tools and rubrics', 'Informal interview with students', 'LMS records', 'Grade sheets and records'],
+            ],
+        ],
+    ];
+}
+
+function program_chair_legacy_evaluation_question_bank(): array
 {
     return [
         [
@@ -79,6 +163,49 @@ function program_chair_evaluation_question_bank(): array
             ],
         ],
     ];
+}
+
+function program_chair_evaluation_instrument_version_for(?array $evaluation, array $answers = []): string
+{
+    $savedVersion = trim((string) ($evaluation['instrument_version'] ?? ''));
+    if ($savedVersion !== '') {
+        return $savedVersion;
+    }
+
+    if ($answers !== []) {
+        foreach (array_keys($answers) as $questionKey) {
+            if (preg_match('/^(mtl|ckpt|ct)_\d+$/', (string) $questionKey)) {
+                return program_chair_latest_instrument_version();
+            }
+        }
+
+        return program_chair_legacy_instrument_version();
+    }
+
+    $questionCount = (int) ($evaluation['question_count'] ?? 0);
+    if ($questionCount >= 20) {
+        return program_chair_legacy_instrument_version();
+    }
+
+    return program_chair_latest_instrument_version();
+}
+
+function program_chair_all_evaluation_categories(): array
+{
+    $categories = [];
+
+    foreach ([program_chair_latest_instrument_version(), program_chair_legacy_instrument_version()] as $instrumentVersion) {
+        foreach (program_chair_evaluation_question_bank($instrumentVersion) as $category) {
+            $categoryKey = (string) ($category['key'] ?? '');
+            if ($categoryKey === '' || isset($categories[$categoryKey])) {
+                continue;
+            }
+
+            $categories[$categoryKey] = $category;
+        }
+    }
+
+    return $categories;
 }
 
 function ensure_program_chair_tables(PDO $pdo): void
@@ -150,6 +277,8 @@ function ensure_program_chair_tables(PDO $pdo): void
             KEY idx_pc_eval_answer_category (category_key)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+
+    program_chair_recalculate_saved_summaries($pdo);
 
     $initialized = true;
 }
@@ -237,6 +366,65 @@ function program_chair_ensure_evaluation_subject_columns(PDO $pdo): void
              ADD COLUMN subject_code VARCHAR(50) NOT NULL DEFAULT '' AFTER subject_id"
         );
     }
+
+    if (!isset($columns['instrument_version'])) {
+        program_chair_add_column_if_missing(
+            $pdo,
+            "ALTER TABLE tbl_program_chair_faculty_evaluations
+             ADD COLUMN instrument_version VARCHAR(40) NOT NULL DEFAULT '' AFTER subject_text"
+        );
+    }
+}
+
+function program_chair_recalculate_saved_summaries(PDO $pdo): void
+{
+    static $synced = false;
+
+    if ($synced) {
+        return;
+    }
+
+    $pdo->exec(
+        "UPDATE tbl_program_chair_faculty_evaluations ev
+         INNER JOIN (
+            SELECT
+                program_chair_evaluation_id,
+                COUNT(*) AS question_count,
+                COALESCE(SUM(rating), 0) AS total_score,
+                ROUND(AVG(rating), 2) AS average_rating
+            FROM tbl_program_chair_faculty_evaluation_answers
+            WHERE rating BETWEEN 1 AND 5
+            GROUP BY program_chair_evaluation_id
+         ) ans ON ans.program_chair_evaluation_id = ev.program_chair_evaluation_id
+         SET ev.question_count = ans.question_count,
+             ev.total_score = ans.total_score,
+             ev.average_rating = ans.average_rating
+         WHERE ev.question_count <> ans.question_count
+            OR ev.total_score <> ans.total_score
+            OR ev.average_rating <> ans.average_rating"
+    );
+
+    $pdo->exec(
+        "UPDATE tbl_program_chair_faculty_evaluations ev
+         INNER JOIN (
+            SELECT
+                program_chair_evaluation_id,
+                COUNT(*) AS answer_count,
+                SUM(CASE WHEN category_key IN ('commitment', 'knowledge_of_subject_matter', 'teaching_for_independent_learning', 'management_of_learning') THEN 1 ELSE 0 END) AS legacy_answer_count,
+                SUM(CASE WHEN category_key IN ('management_of_teaching_and_learning', 'content_knowledge_pedagogy_and_technology', 'commitment_and_transparency') THEN 1 ELSE 0 END) AS latest_answer_count
+            FROM tbl_program_chair_faculty_evaluation_answers
+            GROUP BY program_chair_evaluation_id
+         ) ans ON ans.program_chair_evaluation_id = ev.program_chair_evaluation_id
+         SET ev.instrument_version = CASE
+             WHEN ans.legacy_answer_count > 0 THEN '" . program_chair_legacy_instrument_version() . "'
+             WHEN ans.latest_answer_count > 0 THEN '" . program_chair_latest_instrument_version() . "'
+             WHEN ans.answer_count >= 20 THEN '" . program_chair_legacy_instrument_version() . "'
+             ELSE '" . program_chair_latest_instrument_version() . "'
+         END
+         WHERE ev.instrument_version = ''"
+    );
+
+    $synced = true;
 }
 
 function program_chair_add_column_if_missing(PDO $pdo, string $sql): void
@@ -821,6 +1009,7 @@ function program_chair_create_or_get_evaluation(PDO $pdo, array $context): array
             subject_code,
             faculty_name,
             subject_text,
+            instrument_version,
             comment_text,
             question_count,
             total_score,
@@ -835,6 +1024,7 @@ function program_chair_create_or_get_evaluation(PDO $pdo, array $context): array
             '',
             :faculty_name,
             '',
+            :instrument_version,
             '',
             0,
             0,
@@ -848,6 +1038,7 @@ function program_chair_create_or_get_evaluation(PDO $pdo, array $context): array
         'program_chair_user_management_id' => $programChairUserId,
         'faculty_id' => $facultyId,
         'faculty_name' => $context['faculty_name'],
+        'instrument_version' => program_chair_latest_instrument_version(),
         'evaluation_token' => bin2hex(random_bytes(16)),
     ]);
 
@@ -887,9 +1078,9 @@ function program_chair_evaluation_answer_value(array $answers, array $category, 
     return isset($answers[$questionKey]) ? (int) $answers[$questionKey] : 0;
 }
 
-function program_chair_evaluation_has_any_answer(array $submittedAnswers): bool
+function program_chair_evaluation_has_any_answer(array $submittedAnswers, ?string $instrumentVersion = null): bool
 {
-    foreach (program_chair_evaluation_question_bank() as $category) {
+    foreach (program_chair_evaluation_question_bank($instrumentVersion) as $category) {
         $position = 1;
         foreach ($category['questions'] as $questionText) {
             $questionKey = evaluation_question_key($category, $position);
@@ -905,12 +1096,12 @@ function program_chair_evaluation_has_any_answer(array $submittedAnswers): bool
     return false;
 }
 
-function program_chair_evaluation_submitted_answer_values(array $submittedAnswers): array
+function program_chair_evaluation_submitted_answer_values(array $submittedAnswers, ?string $instrumentVersion = null): array
 {
     $answers = [];
     $validScores = array_keys(program_chair_evaluation_scale_options());
 
-    foreach (program_chair_evaluation_question_bank() as $category) {
+    foreach (program_chair_evaluation_question_bank($instrumentVersion) as $category) {
         $position = 1;
         foreach ($category['questions'] as $questionText) {
             $questionKey = evaluation_question_key($category, $position);
@@ -930,12 +1121,12 @@ function program_chair_evaluation_submitted_answer_values(array $submittedAnswer
     return $answers;
 }
 
-function program_chair_normalize_evaluation_answers(array $submittedAnswers, bool $requireComplete = true): array
+function program_chair_normalize_evaluation_answers(array $submittedAnswers, bool $requireComplete = true, ?string $instrumentVersion = null): array
 {
     $normalized = [];
     $validScores = array_keys(program_chair_evaluation_scale_options());
 
-    foreach (program_chair_evaluation_question_bank() as $category) {
+    foreach (program_chair_evaluation_question_bank($instrumentVersion) as $category) {
         $position = 1;
         foreach ($category['questions'] as $questionText) {
             $questionKey = evaluation_question_key($category, $position);
@@ -1040,7 +1231,8 @@ function program_chair_save_evaluation_submission(
     $normalizedDate = program_chair_normalize_evaluation_date($evaluationDate, $isSubmitted);
     $normalizedTime = program_chair_normalize_evaluation_time($evaluationTime, $isSubmitted);
 
-    $normalizedAnswers = program_chair_normalize_evaluation_answers($submittedAnswers, $isSubmitted);
+    $instrumentVersion = program_chair_evaluation_instrument_version_for($evaluation);
+    $normalizedAnswers = program_chair_normalize_evaluation_answers($submittedAnswers, $isSubmitted, $instrumentVersion);
     $totalScore = 0;
     foreach ($normalizedAnswers as $answer) {
         $totalScore += (int) $answer['rating'];
@@ -1058,6 +1250,7 @@ function program_chair_save_evaluation_submission(
                  subject_id = :subject_id,
                  subject_code = :subject_code,
                  subject_text = :subject_text,
+                 instrument_version = :instrument_version,
                  evaluation_date = :evaluation_date,
                  evaluation_time = :evaluation_time,
                  comment_text = :comment_text,
@@ -1076,6 +1269,7 @@ function program_chair_save_evaluation_submission(
             'subject_id' => $subjectPayload['subject_id'],
             'subject_code' => $subjectPayload['subject_code'],
             'subject_text' => $subjectText,
+            'instrument_version' => $instrumentVersion,
             'evaluation_date' => $normalizedDate,
             'evaluation_time' => $normalizedTime,
             'comment_text' => trim($commentText),

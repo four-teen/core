@@ -27,6 +27,7 @@ $subjectText = '';
 $evaluationDate = date('Y-m-d');
 $evaluationTime = date('H:i');
 $commentText = '';
+$instrumentVersion = program_chair_latest_instrument_version();
 $pageError = null;
 $noticeMessage = flash('notice');
 $errorMessage = flash('error');
@@ -59,7 +60,8 @@ try {
         $evaluationTime = trim((string) ($_POST['evaluation_time'] ?? ''));
         $commentText = trim((string) ($_POST['comment_text'] ?? ''));
         $submittedAnswers = isset($_POST['answers']) && is_array($_POST['answers']) ? $_POST['answers'] : [];
-        $answers = program_chair_evaluation_submitted_answer_values($submittedAnswers);
+        $instrumentVersion = program_chair_evaluation_instrument_version_for($evaluation);
+        $answers = program_chair_evaluation_submitted_answer_values($submittedAnswers, $instrumentVersion);
 
         if ($action !== 'save_draft' && $action !== 'submit_evaluation') {
             throw new RuntimeException('Invalid supervisory evaluation action.');
@@ -71,7 +73,7 @@ try {
             && $evaluationDate === ''
             && $evaluationTime === ''
             && $commentText === ''
-            && !program_chair_evaluation_has_any_answer($submittedAnswers)
+            && !program_chair_evaluation_has_any_answer($submittedAnswers, $instrumentVersion)
         ) {
             throw new RuntimeException('Select at least one rating or add evaluation details before saving a draft.');
         }
@@ -101,6 +103,7 @@ try {
 
     if ($evaluation !== null) {
         $answers = program_chair_find_evaluation_answers($pdo, (int) $evaluation['program_chair_evaluation_id']);
+        $instrumentVersion = program_chair_evaluation_instrument_version_for($evaluation, $answers);
         $subjectKey = program_chair_subject_key_for_saved_evaluation($pdo, $evaluation);
         $subjectText = (string) ($evaluation['subject_text'] ?? '');
         $evaluationDate = trim((string) ($evaluation['evaluation_date'] ?? '')) !== ''
@@ -119,7 +122,7 @@ try {
         : 'Unable to load the supervisory evaluation form right now. Please try again.');
 }
 
-$questionBank = program_chair_evaluation_question_bank();
+$questionBank = program_chair_evaluation_question_bank($instrumentVersion);
 $scaleOptions = program_chair_evaluation_scale_options();
 $isSubmitted = is_array($evaluation) && (($evaluation['submission_status'] ?? '') === 'submitted');
 $extraHeadContent = '<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />';
@@ -172,7 +175,7 @@ require __DIR__ . '/_start.php';
         <div class="card-body">
           <span class="badge bg-label-info mb-3">Supervisory Rating</span>
           <h3 class="mb-2"><?= h((string) $context['faculty_name']) ?></h3>
-          <p class="mb-3">Faculty Performance Evaluation Tool for Program Chair supervisory rating.</p>
+          <p class="mb-3">Supervisors Evaluation of Faculty (SEF) instrument for supervisory rating.</p>
           <div class="row g-3">
             <div class="col-md-6">
               <div class="module-note">
@@ -280,11 +283,15 @@ require __DIR__ . '/_start.php';
         </div>
       </div>
 
+      <?php $benchmarkNumber = 1; ?>
       <?php foreach ($questionBank as $category): ?>
         <div class="col-12">
           <div class="card">
             <div class="card-header">
               <h5 class="mb-0"><?= h($category['title']) ?></h5>
+              <?php if (trim((string) ($category['description'] ?? '')) !== ''): ?>
+                <small class="text-muted"><?= h((string) $category['description']) ?></small>
+              <?php endif; ?>
             </div>
             <div class="card-body">
               <div class="evaluation-question-list">
@@ -294,8 +301,15 @@ require __DIR__ . '/_start.php';
                   <?php $selectedValue = program_chair_evaluation_answer_value($answers, $category, $position); ?>
                   <div class="evaluation-question-card">
                     <div class="evaluation-question-text">
-                      <strong><?= h((string) $position) ?>.</strong>
+                      <strong><?= h((string) $benchmarkNumber) ?>.</strong>
                       <?= h($questionText) ?>
+                      <?php $verificationItems = isset($category['verification'][$position]) && is_array($category['verification'][$position]) ? $category['verification'][$position] : []; ?>
+                      <?php if ($verificationItems !== []): ?>
+                        <div class="text-muted small mt-2">
+                          <span class="fw-semibold">Suggested Means of Verification:</span>
+                          <?= h(implode('; ', $verificationItems)) ?>
+                        </div>
+                      <?php endif; ?>
                     </div>
                     <div class="evaluation-rating-group">
                       <?php foreach ($scaleOptions as $score => $item): ?>
@@ -313,6 +327,7 @@ require __DIR__ . '/_start.php';
                     </div>
                   </div>
                   <?php $position++; ?>
+                  <?php $benchmarkNumber++; ?>
                 <?php endforeach; ?>
               </div>
             </div>
