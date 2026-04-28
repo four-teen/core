@@ -210,6 +210,45 @@ require __DIR__ . '/_start.php';
     </div>
   </div>
 </div>
+<div class="modal fade" id="partialEvaluationStudentsModal" tabindex="-1" aria-labelledby="partialEvaluationStudentsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl modal-fullscreen-sm-down">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="partialEvaluationStudentsModalLabel">Partially Evaluated Students</h5>
+          <small class="text-muted" id="partialEvaluationStudentsModalSubtitle"></small>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="partialEvaluationStudentsTable">
+            <thead>
+              <tr>
+                <th>Student No.</th>
+                <th>Student Name</th>
+                <th>Email</th>
+                <th class="text-end">Progress</th>
+              </tr>
+            </thead>
+            <tbody id="partialEvaluationStudentsTableBody">
+              <tr>
+                <td colspan="4" class="text-center text-muted py-4">Click a partially evaluated chart segment to view students.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="partialEvaluationStudentsPrintButton">
+          <i class="bx bx-printer me-1"></i>
+          Print List
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 <script src="<?= h(asset_url('assets/vendor/libs/apex-charts/apexcharts.js')) ?>"></script>
 <script>
   window.addEventListener('DOMContentLoaded', function () {
@@ -219,11 +258,130 @@ require __DIR__ . '/_start.php';
 
     var categoryData = <?= $evaluationCategoryAveragesJson ?>;
     var programData = <?= $evaluationProgramCompletionJson ?>;
+    var partialStudentsModalElement = document.getElementById('partialEvaluationStudentsModal');
+    var partialStudentsModal = partialStudentsModalElement && typeof bootstrap !== 'undefined'
+      ? bootstrap.Modal.getOrCreateInstance(partialStudentsModalElement)
+      : null;
+    var partialStudentsModalTitle = document.getElementById('partialEvaluationStudentsModalLabel');
+    var partialStudentsModalSubtitle = document.getElementById('partialEvaluationStudentsModalSubtitle');
+    var partialStudentsTableBody = document.getElementById('partialEvaluationStudentsTableBody');
+    var partialStudentsPrintButton = document.getElementById('partialEvaluationStudentsPrintButton');
+    var activePartialStudentsDetail = null;
 
     function normalizeLabels(labels) {
       return (Array.isArray(labels) ? labels : []).map(function (label) {
         return Array.isArray(label) ? label.join(' ') : label;
       });
+    }
+
+    function escapeHtml(value) {
+      return String(value === null || typeof value === 'undefined' ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function studentProgressLabel(student) {
+      var submitted = Number(student.submittedSubjects || 0);
+      var total = Number(student.totalSubjects || 0);
+
+      return submitted + ' of ' + total + ' subjects';
+    }
+
+    function renderPartialStudentsRows(students) {
+      if (!partialStudentsTableBody) {
+        return;
+      }
+
+      if (!Array.isArray(students) || !students.length) {
+        partialStudentsTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">No partially evaluated students for this program.</td></tr>';
+        return;
+      }
+
+      partialStudentsTableBody.innerHTML = students.map(function (student) {
+        var email = String(student.email || '').trim();
+
+        return '<tr>' +
+          '<td>' + escapeHtml(student.studentNumber || '-') + '</td>' +
+          '<td class="fw-semibold">' + escapeHtml(student.name || 'Student') + '</td>' +
+          '<td>' + (email ? '<a href="mailto:' + escapeHtml(email) + '">' + escapeHtml(email) + '</a>' : '<span class="text-muted">No email</span>') + '</td>' +
+          '<td class="text-end">' + escapeHtml(studentProgressLabel(student)) + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    function openPartialStudentsModal(detail) {
+      activePartialStudentsDetail = detail || null;
+
+      if (!activePartialStudentsDetail || !partialStudentsModal) {
+        return;
+      }
+
+      var students = Array.isArray(activePartialStudentsDetail.partialStudentList)
+        ? activePartialStudentsDetail.partialStudentList
+        : [];
+      var program = activePartialStudentsDetail.program || 'Program';
+      var programName = activePartialStudentsDetail.programName || '';
+
+      if (partialStudentsModalTitle) {
+        partialStudentsModalTitle.textContent = 'Partially Evaluated Students - ' + program;
+      }
+
+      if (partialStudentsModalSubtitle) {
+        partialStudentsModalSubtitle.textContent = programName
+          ? programName + ' | ' + students.length + ' student' + (students.length === 1 ? '' : 's')
+          : students.length + ' student' + (students.length === 1 ? '' : 's');
+      }
+
+      renderPartialStudentsRows(students);
+      partialStudentsModal.show();
+    }
+
+    function printPartialStudentsList() {
+      if (!activePartialStudentsDetail) {
+        return;
+      }
+
+      var students = Array.isArray(activePartialStudentsDetail.partialStudentList)
+        ? activePartialStudentsDetail.partialStudentList
+        : [];
+      var program = activePartialStudentsDetail.program || 'Program';
+      var programName = activePartialStudentsDetail.programName || '';
+      var generatedAt = new Date().toLocaleString();
+      var rows = students.length ? students.map(function (student) {
+        return '<tr>' +
+          '<td>' + escapeHtml(student.studentNumber || '-') + '</td>' +
+          '<td>' + escapeHtml(student.name || 'Student') + '</td>' +
+          '<td>' + escapeHtml(student.email || '') + '</td>' +
+          '<td>' + escapeHtml(studentProgressLabel(student)) + '</td>' +
+        '</tr>';
+      }).join('') : '<tr><td colspan="4">No partially evaluated students for this program.</td></tr>';
+      var printWindow = window.open('', '_blank', 'width=960,height=720');
+
+      if (!printWindow) {
+        window.print();
+        return;
+      }
+
+      printWindow.document.write(
+        '<!doctype html><html><head><title>Partially Evaluated Students - ' + escapeHtml(program) + '</title>' +
+        '<style>' +
+        'body{font-family:Arial,sans-serif;color:#2b2c40;margin:24px;}h1{font-size:20px;margin:0 0 6px;}p{margin:0 0 16px;color:#566a7f;}table{width:100%;border-collapse:collapse;font-size:12px;}th,td{border:1px solid #d9dee3;padding:8px;text-align:left;}th{background:#f5f5f9;}td:last-child,th:last-child{text-align:right;}' +
+        '</style></head><body>' +
+        '<h1>Partially Evaluated Students - ' + escapeHtml(program) + '</h1>' +
+        '<p>' + escapeHtml(programName) + (programName ? ' | ' : '') + students.length + ' student' + (students.length === 1 ? '' : 's') + ' | Generated ' + escapeHtml(generatedAt) + '</p>' +
+        '<table><thead><tr><th>Student No.</th><th>Student Name</th><th>Email</th><th>Progress</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '</body></html>'
+      );
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+
+    if (partialStudentsPrintButton) {
+      partialStudentsPrintButton.addEventListener('click', printPartialStudentsList);
     }
 
     function renderRatingBarChart(selector, chartData, emptyText) {
@@ -383,6 +541,20 @@ require __DIR__ . '/_start.php';
           fontFamily: 'Public Sans, sans-serif',
           toolbar: { show: false },
           zoom: { enabled: false },
+          events: {
+            dataPointSelection: function (event, chartContext, config) {
+              var partialSeriesIndex = 1;
+              var dataPointIndex = config && typeof config.dataPointIndex === 'number' ? config.dataPointIndex : -1;
+              var details = Array.isArray(chartData.details) ? chartData.details : [];
+              var detail = details[dataPointIndex] || null;
+
+              if (!detail || config.seriesIndex !== partialSeriesIndex || Number(detail.partialStudents || 0) <= 0) {
+                return;
+              }
+
+              openPartialStudentsModal(detail);
+            }
+          },
           animations: {
             enabled: true,
             easing: 'easeinout',
@@ -396,6 +568,7 @@ require __DIR__ . '/_start.php';
             horizontal: true,
             borderRadius: 8,
             barHeight: '56%',
+            distributed: false,
             dataLabels: {
               total: {
                 enabled: true,

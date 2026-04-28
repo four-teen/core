@@ -636,6 +636,7 @@ function program_chair_faculty_options(PDO $pdo): array
 function program_chair_selected_faculty_list(PDO $pdo): array
 {
     ensure_program_chair_tables($pdo);
+    ensure_role_evaluation_tables($pdo);
 
     $statement = $pdo->query(
         "SELECT
@@ -650,36 +651,166 @@ function program_chair_selected_faculty_list(PDO $pdo): array
             f.middle_name,
             f.ext_name,
             f.status,
-            COUNT(ev.program_chair_evaluation_id) AS evaluation_count,
-            SUM(CASE WHEN ev.submission_status = 'submitted' THEN 1 ELSE 0 END) AS submitted_count,
-            SUM(CASE WHEN ev.submission_status = 'draft' THEN 1 ELSE 0 END) AS draft_count,
-            ROUND(AVG(NULLIF(ev.average_rating, 0)), 2) AS average_rating
+            COALESCE(student_eval.evaluation_count, 0) AS student_evaluation_count,
+            COALESCE(student_eval.submitted_count, 0) AS student_submitted_count,
+            COALESCE(student_eval.draft_count, 0) AS student_draft_count,
+            student_eval.average_rating AS student_average_rating,
+            COALESCE(pc_eval.evaluation_count, 0) AS program_chair_evaluation_count,
+            COALESCE(pc_eval.submitted_count, 0) AS program_chair_submitted_count,
+            COALESCE(pc_eval.draft_count, 0) AS program_chair_draft_count,
+            COALESCE(pc_eval.average_total, 0) AS program_chair_average_total,
+            COALESCE(pc_eval.average_count, 0) AS program_chair_average_count
          FROM tbl_program_chair_faculty pcf
          INNER JOIN tbl_faculty f ON f.faculty_id = pcf.faculty_id
-         LEFT JOIN tbl_program_chair_faculty_evaluations ev
-            ON ev.faculty_id = pcf.faculty_id
+         LEFT JOIN (
+            SELECT
+                faculty_id,
+                COUNT(*) AS evaluation_count,
+                SUM(CASE WHEN submission_status = 'submitted' THEN 1 ELSE 0 END) AS submitted_count,
+                SUM(CASE WHEN submission_status = 'draft' THEN 1 ELSE 0 END) AS draft_count,
+                ROUND(AVG(NULLIF(average_rating, 0)), 2) AS average_rating
+            FROM tbl_student_faculty_evaluations
+            WHERE faculty_id <> 0
+            GROUP BY faculty_id
+         ) student_eval
+            ON student_eval.faculty_id = pcf.faculty_id
+         LEFT JOIN (
+            SELECT
+                faculty_id,
+                COUNT(*) AS evaluation_count,
+                SUM(CASE WHEN submission_status = 'submitted' THEN 1 ELSE 0 END) AS submitted_count,
+                SUM(CASE WHEN submission_status = 'draft' THEN 1 ELSE 0 END) AS draft_count,
+                SUM(CASE WHEN average_rating > 0 THEN average_rating ELSE 0 END) AS average_total,
+                SUM(CASE WHEN average_rating > 0 THEN 1 ELSE 0 END) AS average_count
+            FROM tbl_program_chair_faculty_evaluations
+            WHERE faculty_id <> 0
+            GROUP BY faculty_id
+         ) pc_eval
+            ON pc_eval.faculty_id = pcf.faculty_id
          WHERE pcf.is_active = 1
-         GROUP BY
-            pcf.program_chair_faculty_id,
-            pcf.faculty_id,
-            pcf.faculty_classification,
-            pcf.is_active,
-            pcf.created_at,
-            pcf.updated_at,
-            f.last_name,
-            f.first_name,
-            f.middle_name,
-            f.ext_name,
-            f.status
          ORDER BY f.status ASC, f.last_name ASC, f.first_name ASC, pcf.faculty_id ASC"
     );
 
     $rows = $statement->fetchAll();
     foreach ($rows as $index => $row) {
         $rows[$index]['faculty_name'] = program_chair_faculty_name_from_row($row);
+        $roleCounts = program_chair_faculty_role_supervisory_counts($pdo, $row);
+        $rows[$index]['supervisory_evaluation_count'] = (int) ($row['program_chair_evaluation_count'] ?? 0) + $roleCounts['evaluation_count'];
+        $rows[$index]['supervisory_submitted_count'] = (int) ($row['program_chair_submitted_count'] ?? 0) + $roleCounts['submitted_count'];
+        $rows[$index]['supervisory_draft_count'] = (int) ($row['program_chair_draft_count'] ?? 0) + $roleCounts['draft_count'];
+        $supervisoryAverageTotal = (float) ($row['program_chair_average_total'] ?? 0) + $roleCounts['average_total'];
+        $supervisoryAverageCount = (int) ($row['program_chair_average_count'] ?? 0) + $roleCounts['average_count'];
+        $rows[$index]['supervisory_average_rating'] = $supervisoryAverageCount > 0
+            ? round($supervisoryAverageTotal / $supervisoryAverageCount, 2)
+            : null;
     }
 
     return $rows;
+}
+
+function program_chair_faculty_role_supervisory_counts(PDO $pdo, array $faculty): array
+{
+    $programChairUserIds = [];
+    $facultyId = (int) ($faculty['faculty_id'] ?? 0);
+
+    if ($facultyId <= 0) {
+        return [
+            'evaluation_count' => 0,
+            'submitted_count' => 0,
+            'draft_count' => 0,
+            'average_total' => 0.0,
+            'average_count' => 0,
+        ];
+    }
+
+    $statement = $pdo->prepare(
+        "SELECT DISTINCT program_chair_user_management_id
+         FROM tbl_program_chair_faculty_evaluations
+         WHERE faculty_id = :faculty_id
+           AND program_chair_user_management_id > 0"
+    );
+    $statement->execute(['faculty_id' => $facultyId]);
+
+    foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $programChairUserId) {
+        $programChairUserIds[(int) $programChairUserId] = true;
+    }
+
+    $facultyUser = individual_faculty_performance_faculty_user_management($pdo, $faculty);
+    $facultyUserRole = $facultyUser !== null
+        ? user_management_normalize_role((string) ($facultyUser['account_role'] ?? ''))
+        : '';
+    $facultyUserId = $facultyUser !== null ? (int) ($facultyUser['user_management_id'] ?? 0) : 0;
+
+    if ($facultyUserRole === 'program_chair' && $facultyUserId > 0) {
+        $programChairUserIds[$facultyUserId] = true;
+    }
+
+    $counts = [
+        'evaluation_count' => 0,
+        'submitted_count' => 0,
+        'draft_count' => 0,
+        'average_total' => 0.0,
+        'average_count' => 0,
+    ];
+
+    $deanUserIds = [];
+    foreach (program_chair_role_evaluation_count_rows($pdo, 'dean', 'program_chair', array_keys($programChairUserIds)) as $row) {
+        $counts['evaluation_count'] += (int) ($row['evaluation_count'] ?? 0);
+        $counts['submitted_count'] += (int) ($row['submitted_count'] ?? 0);
+        $counts['draft_count'] += (int) ($row['draft_count'] ?? 0);
+        $counts['average_total'] += (float) ($row['average_total'] ?? 0);
+        $counts['average_count'] += (int) ($row['average_count'] ?? 0);
+
+        $deanUserId = (int) ($row['evaluator_user_management_id'] ?? 0);
+        if ($deanUserId > 0) {
+            $deanUserIds[$deanUserId] = true;
+        }
+    }
+
+    if ($facultyUserRole === 'dean' && $facultyUserId > 0) {
+        $deanUserIds[$facultyUserId] = true;
+    }
+
+    foreach (individual_faculty_performance_dean_user_ids_for_program_chairs($pdo, array_keys($programChairUserIds)) as $deanUserId) {
+        $deanUserIds[$deanUserId] = true;
+    }
+
+    foreach (program_chair_role_evaluation_count_rows($pdo, 'director', 'dean', array_keys($deanUserIds)) as $row) {
+        $counts['evaluation_count'] += (int) ($row['evaluation_count'] ?? 0);
+        $counts['submitted_count'] += (int) ($row['submitted_count'] ?? 0);
+        $counts['draft_count'] += (int) ($row['draft_count'] ?? 0);
+        $counts['average_total'] += (float) ($row['average_total'] ?? 0);
+        $counts['average_count'] += (int) ($row['average_count'] ?? 0);
+    }
+
+    return $counts;
+}
+
+function program_chair_role_evaluation_count_rows(PDO $pdo, string $evaluatorRole, string $targetRole, array $targetUserIds): array
+{
+    $targetUserIds = array_values(array_unique(array_filter(array_map('intval', $targetUserIds))));
+    if ($targetUserIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($targetUserIds), '?'));
+    $statement = $pdo->prepare(
+        "SELECT
+            evaluator_user_management_id,
+            COUNT(*) AS evaluation_count,
+            SUM(CASE WHEN submission_status = 'submitted' THEN 1 ELSE 0 END) AS submitted_count,
+            SUM(CASE WHEN submission_status = 'draft' THEN 1 ELSE 0 END) AS draft_count,
+            SUM(CASE WHEN average_rating > 0 THEN average_rating ELSE 0 END) AS average_total,
+            SUM(CASE WHEN average_rating > 0 THEN 1 ELSE 0 END) AS average_count
+         FROM tbl_role_evaluations
+         WHERE evaluator_role = ?
+           AND evaluatee_role = ?
+           AND evaluatee_user_management_id IN (" . $placeholders . ")
+         GROUP BY evaluator_user_management_id"
+    );
+    $statement->execute(array_merge([$evaluatorRole, $targetRole], $targetUserIds));
+
+    return $statement->fetchAll();
 }
 
 function program_chair_faculty_add(PDO $pdo, int $facultyId, string $classification, int $createdByUserId): void

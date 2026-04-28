@@ -471,13 +471,13 @@ function dashboard_evaluation_rating_trend(PDO $pdo, int $months = 12): array
     }
 
     $categoryLabels = [];
-    foreach (evaluation_all_question_categories() as $category) {
+    foreach (evaluation_question_bank(evaluation_latest_instrument_version()) as $category) {
         $categoryKey = (string) ($category['key'] ?? '');
         if ($categoryKey === '') {
             continue;
         }
 
-        $categoryLabels[$categoryKey] = ucwords(strtolower((string) ($category['title'] ?? $categoryKey)));
+        $categoryLabels[$categoryKey] = dashboard_category_display_name((string) ($category['title'] ?? $categoryKey));
     }
 
     $seriesByCategory = [];
@@ -487,7 +487,13 @@ function dashboard_evaluation_rating_trend(PDO $pdo, int $months = 12): array
 
     $sql = "SELECT
                 DATE_FORMAT(COALESCE(ev.final_submitted_at, ev.updated_at, ev.completed_at, ans.created_at), '%Y-%m') AS period_key,
-                ans.category_key,
+                CASE ans.category_key
+                    WHEN 'management_of_learning' THEN 'management_of_teaching_and_learning'
+                    WHEN 'teaching_for_independent_learning' THEN 'management_of_teaching_and_learning'
+                    WHEN 'knowledge_of_subject_matter' THEN 'content_knowledge_pedagogy_and_technology'
+                    WHEN 'commitment' THEN 'commitment_and_transparency'
+                    ELSE ans.category_key
+                END AS category_key,
                 MAX(ans.category_title) AS category_title,
                 ROUND(AVG(ans.rating), 2) AS average_rating
             FROM tbl_student_faculty_evaluation_answers ans
@@ -497,8 +503,8 @@ function dashboard_evaluation_rating_trend(PDO $pdo, int $months = 12): array
               AND ev.submission_status = 'submitted'
               AND ans.rating BETWEEN 1 AND 5
               AND COALESCE(ev.final_submitted_at, ev.updated_at, ev.completed_at, ans.created_at) >= :start_date
-            GROUP BY period_key, ans.category_key
-            ORDER BY period_key ASC, ans.category_key ASC";
+            GROUP BY period_key, category_key
+            ORDER BY period_key ASC, category_key ASC";
 
     $statement = $pdo->prepare($sql);
     $statement->execute(['start_date' => $startDate->format('Y-m-d H:i:s')]);
@@ -506,14 +512,14 @@ function dashboard_evaluation_rating_trend(PDO $pdo, int $months = 12): array
     $hasData = false;
     foreach ($statement->fetchAll() as $row) {
         $periodKey = (string) ($row['period_key'] ?? '');
-        $categoryKey = (string) ($row['category_key'] ?? '');
+        $categoryKey = dashboard_normalize_student_evaluation_category_key((string) ($row['category_key'] ?? ''));
 
-        if (!isset($periodKeys[$periodKey])) {
+        if ($categoryKey === '' || !isset($periodKeys[$periodKey])) {
             continue;
         }
 
         if (!isset($seriesByCategory[$categoryKey])) {
-            $categoryLabels[$categoryKey] = ucwords(strtolower((string) ($row['category_title'] ?? $categoryKey)));
+            $categoryLabels[$categoryKey] = dashboard_category_display_name((string) ($row['category_title'] ?? $categoryKey));
             $seriesByCategory[$categoryKey] = array_fill(0, $months, null);
         }
 
@@ -541,13 +547,13 @@ function dashboard_evaluation_category_averages(PDO $pdo): array
     ensure_evaluation_subject_scope($pdo);
 
     $categories = [];
-    foreach (evaluation_all_question_categories() as $category) {
+    foreach (evaluation_question_bank(evaluation_latest_instrument_version()) as $category) {
         $categoryKey = (string) ($category['key'] ?? '');
         if ($categoryKey === '') {
             continue;
         }
 
-        $categoryTitle = ucwords(strtolower((string) ($category['title'] ?? $categoryKey)));
+        $categoryTitle = dashboard_category_display_name((string) ($category['title'] ?? $categoryKey));
         $categories[$categoryKey] = [
             'name' => $categoryTitle,
             'label' => dashboard_category_axis_label($categoryTitle),
@@ -558,7 +564,13 @@ function dashboard_evaluation_category_averages(PDO $pdo): array
     }
 
     $sql = "SELECT
-                ans.category_key,
+                CASE ans.category_key
+                    WHEN 'management_of_learning' THEN 'management_of_teaching_and_learning'
+                    WHEN 'teaching_for_independent_learning' THEN 'management_of_teaching_and_learning'
+                    WHEN 'knowledge_of_subject_matter' THEN 'content_knowledge_pedagogy_and_technology'
+                    WHEN 'commitment' THEN 'commitment_and_transparency'
+                    ELSE ans.category_key
+                END AS category_key,
                 MAX(ans.category_title) AS category_title,
                 ROUND(AVG(ans.rating), 2) AS average_rating,
                 COUNT(*) AS response_count,
@@ -569,16 +581,20 @@ function dashboard_evaluation_category_averages(PDO $pdo): array
             WHERE ev.student_enrollment_id IS NOT NULL
               AND ev.submission_status = 'submitted'
               AND ans.rating BETWEEN 1 AND 5
-            GROUP BY ans.category_key
-            ORDER BY ans.category_key ASC";
+            GROUP BY category_key
+            ORDER BY category_key ASC";
 
     $statement = $pdo->query($sql);
 
     $hasData = false;
     foreach ($statement->fetchAll() as $row) {
-        $categoryKey = (string) ($row['category_key'] ?? '');
+        $categoryKey = dashboard_normalize_student_evaluation_category_key((string) ($row['category_key'] ?? ''));
+        if ($categoryKey === '') {
+            continue;
+        }
+
         if (!isset($categories[$categoryKey])) {
-            $categoryTitle = ucwords(strtolower((string) ($row['category_title'] ?? $categoryKey)));
+            $categoryTitle = dashboard_category_display_name((string) ($row['category_title'] ?? $categoryKey));
             $categories[$categoryKey] = [
                 'name' => $categoryTitle,
                 'label' => dashboard_category_axis_label($categoryTitle),
@@ -651,6 +667,36 @@ function dashboard_evaluation_category_averages(PDO $pdo): array
         'xMax' => $scale['max'],
         'tickAmount' => $scale['tickAmount'],
     ];
+}
+
+function dashboard_normalize_student_evaluation_category_key(string $categoryKey): string
+{
+    $categoryKey = trim($categoryKey);
+    $legacyMap = [
+        'management_of_learning' => 'management_of_teaching_and_learning',
+        'teaching_for_independent_learning' => 'management_of_teaching_and_learning',
+        'knowledge_of_subject_matter' => 'content_knowledge_pedagogy_and_technology',
+        'commitment' => 'commitment_and_transparency',
+    ];
+
+    return $legacyMap[$categoryKey] ?? $categoryKey;
+}
+
+function dashboard_category_display_name(string $categoryTitle): string
+{
+    $categoryTitle = trim($categoryTitle);
+    if ($categoryTitle === '') {
+        return '';
+    }
+
+    $displayName = ucwords(strtolower($categoryTitle));
+    $displayName = str_replace(
+        [' And ', ' Of ', ' For ', ', Pedagogy And Technology'],
+        [' and ', ' of ', ' for ', ', Pedagogy and Technology'],
+        $displayName
+    );
+
+    return $displayName;
 }
 
 function dashboard_evaluation_college_averages(PDO $pdo): array
@@ -766,6 +812,7 @@ function dashboard_evaluation_program_completion(PDO $pdo): array
 
     $statement = $pdo->query($sql);
     $rows = $statement->fetchAll();
+    $partialStudentsByProgram = dashboard_partial_evaluation_students_by_program($pdo);
 
     $labels = [];
     $completed = [];
@@ -784,6 +831,7 @@ function dashboard_evaluation_program_completion(PDO $pdo): array
         $notStartedStudents = (int) ($row['not_started_students'] ?? 0);
         $evaluatedStudents = (int) ($row['evaluated_students'] ?? 0);
         $eligibleStudents = (int) ($row['eligible_students'] ?? 0);
+        $programId = (int) ($row['program_id'] ?? 0);
 
         $labels[] = $programLabel;
         $completed[] = $completedStudents;
@@ -798,6 +846,7 @@ function dashboard_evaluation_program_completion(PDO $pdo): array
             'partialStudents' => $partialStudents,
             'notStartedStudents' => $notStartedStudents,
             'completionRate' => (float) ($row['completion_rate'] ?? 0),
+            'partialStudentList' => $partialStudentsByProgram[$programId] ?? [],
         ];
 
         $totalEvaluated += $evaluatedStudents;
@@ -824,6 +873,69 @@ function dashboard_evaluation_program_completion(PDO $pdo): array
         'totalEligible' => $totalEligible,
         'hasData' => $rows !== [],
     ];
+}
+
+function dashboard_partial_evaluation_students_by_program(PDO $pdo): array
+{
+    $sql = "SELECT
+                student_scope.program_id,
+                student_scope.program_code,
+                student_scope.program_name,
+                student_scope.student_id,
+                student_scope.total_subjects,
+                student_scope.submitted_subjects,
+                sm.student_number,
+                sm.first_name,
+                sm.middle_name,
+                sm.last_name,
+                sm.suffix_name,
+                sm.email_address
+            FROM (
+                SELECT
+                    es.program_id,
+                    COALESCE(NULLIF(p.program_code, ''), CONCAT('Program ', es.program_id)) AS program_code,
+                    COALESCE(NULLIF(p.program_name, ''), CONCAT('Program ', es.program_id)) AS program_name,
+                    es.student_id,
+                    COUNT(DISTINCT es.student_enrollment_id) AS total_subjects,
+                    COUNT(DISTINCT CASE WHEN ev.submission_status = 'submitted' THEN es.student_enrollment_id END) AS submitted_subjects
+                FROM tbl_student_management_enrolled_subjects es
+                LEFT JOIN tbl_program p ON p.program_id = es.program_id
+                LEFT JOIN tbl_student_faculty_evaluations ev
+                    ON ev.student_enrollment_id = es.student_enrollment_id
+                WHERE es.is_active = 1
+                  AND es.faculty_id <> 0
+                GROUP BY es.program_id, program_code, program_name, es.student_id
+                HAVING total_subjects > 0
+                   AND submitted_subjects > 0
+                   AND submitted_subjects < total_subjects
+            ) student_scope
+            LEFT JOIN tbl_student_management sm
+                ON sm.student_id = student_scope.student_id
+            ORDER BY student_scope.program_code ASC, sm.last_name ASC, sm.first_name ASC, sm.student_number ASC";
+
+    $statement = $pdo->query($sql);
+    $studentsByProgram = [];
+
+    foreach ($statement->fetchAll() as $row) {
+        $programId = (int) ($row['program_id'] ?? 0);
+        $name = person_full_name(
+            $row['last_name'] ?? '',
+            $row['first_name'] ?? '',
+            $row['middle_name'] ?? '',
+            $row['suffix_name'] ?? ''
+        );
+
+        $studentsByProgram[$programId][] = [
+            'studentId' => (int) ($row['student_id'] ?? 0),
+            'studentNumber' => (string) ($row['student_number'] ?? ''),
+            'name' => $name !== '' ? $name : 'Student #' . (string) ((int) ($row['student_id'] ?? 0)),
+            'email' => (string) ($row['email_address'] ?? ''),
+            'submittedSubjects' => (int) ($row['submitted_subjects'] ?? 0),
+            'totalSubjects' => (int) ($row['total_subjects'] ?? 0),
+        ];
+    }
+
+    return $studentsByProgram;
 }
 
 function dashboard_rating_axis_scale(array $values): array

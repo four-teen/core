@@ -63,8 +63,8 @@
               <th>Faculty</th>
               <th>Status</th>
               <th>Classification</th>
-              <th>Evaluations</th>
-              <th>Average</th>
+              <th>Student Evaluation</th>
+              <th>Supervisory Evaluation</th>
               <th class="text-end">Actions</th>
             </tr>
           </thead>
@@ -98,13 +98,25 @@
                   </span>
                 </td>
                 <td>
-                  <div><?= h(format_number($faculty['evaluation_count'] ?? 0)) ?> total</div>
+                  <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span><?= h(format_number($faculty['student_evaluation_count'] ?? 0)) ?> total</span>
+                    <span class="badge bg-label-success"><?= h(format_average($faculty['student_average_rating'] ?? null)) ?></span>
+                  </div>
                   <small class="text-muted">
-                    <?= h(format_number($faculty['submitted_count'] ?? 0)) ?> submitted,
-                    <?= h(format_number($faculty['draft_count'] ?? 0)) ?> draft
+                    <?= h(format_number($faculty['student_submitted_count'] ?? 0)) ?> submitted,
+                    <?= h(format_number($faculty['student_draft_count'] ?? 0)) ?> draft
                   </small>
                 </td>
-                <td><?= h(format_average($faculty['average_rating'])) ?></td>
+                <td>
+                  <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span><?= h(format_number($faculty['supervisory_evaluation_count'] ?? 0)) ?> total</span>
+                    <span class="badge bg-label-warning"><?= h(format_average($faculty['supervisory_average_rating'] ?? null)) ?></span>
+                  </div>
+                  <small class="text-muted">
+                    <?= h(format_number($faculty['supervisory_submitted_count'] ?? 0)) ?> submitted,
+                    <?= h(format_number($faculty['supervisory_draft_count'] ?? 0)) ?> draft
+                  </small>
+                </td>
                 <td class="text-end">
                   <div class="d-inline-flex flex-wrap justify-content-end gap-2">
                     <button
