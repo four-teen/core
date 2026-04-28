@@ -286,6 +286,13 @@ function individual_faculty_performance_faculty(PDO $pdo, int $facultyId): ?arra
 
 function individual_faculty_performance_program_chair_evaluator_name(PDO $pdo, int $facultyId): string
 {
+    $signatory = individual_faculty_performance_program_chair_evaluator_signatory($pdo, $facultyId);
+
+    return (string) ($signatory['name'] ?? '');
+}
+
+function individual_faculty_performance_program_chair_evaluator_signatory(PDO $pdo, int $facultyId): ?array
+{
     $statement = $pdo->prepare(
         "SELECT um.full_name, um.email_address
          FROM tbl_program_chair_faculty_evaluations ev
@@ -302,19 +309,23 @@ function individual_faculty_performance_program_chair_evaluator_name(PDO $pdo, i
 
     $row = $statement->fetch();
     if (!$row) {
-        return '';
+        return null;
     }
 
-    return role_evaluation_user_display_name([
-        'full_name' => (string) ($row['full_name'] ?? ''),
-        'email_address' => (string) ($row['email_address'] ?? ''),
-    ]);
+    return [
+        'name' => role_evaluation_user_display_name([
+            'full_name' => (string) ($row['full_name'] ?? ''),
+            'email_address' => (string) ($row['email_address'] ?? ''),
+        ]),
+        'designation' => 'Program Chair',
+    ];
 }
 
 function individual_faculty_performance_evaluator_signatory(PDO $pdo, int $facultyId, array $faculty): array
 {
     $programChairUserIds = [];
     $deanUserIds = [];
+    $programChairSignatory = individual_faculty_performance_program_chair_evaluator_signatory($pdo, $facultyId);
 
     $statement = $pdo->prepare(
         "SELECT DISTINCT program_chair_user_management_id
@@ -381,9 +392,13 @@ function individual_faculty_performance_evaluator_signatory(PDO $pdo, int $facul
         ];
     }
 
+    if ($programChairSignatory !== null) {
+        return $programChairSignatory;
+    }
+
     return [
         'name' => '',
-        'designation' => 'Dean',
+        'designation' => 'Program Chair',
     ];
 }
 
