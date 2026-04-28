@@ -38,82 +38,12 @@ function role_evaluation_is_evaluator_role(string $role): bool
 
 function role_evaluation_scale_options(): array
 {
-    return [
-        5 => [
-            'label' => 'Outstanding',
-            'description' => 'Performance almost always exceeds the role requirements.',
-        ],
-        4 => [
-            'label' => 'Very Satisfactory',
-            'description' => 'Performance meets and often exceeds the role requirements.',
-        ],
-        3 => [
-            'label' => 'Satisfactory',
-            'description' => 'Performance meets the role requirements.',
-        ],
-        2 => [
-            'label' => 'Fair',
-            'description' => 'Performance needs development to meet the role requirements.',
-        ],
-        1 => [
-            'label' => 'Poor',
-            'description' => 'Performance does not meet the role requirements.',
-        ],
-    ];
+    return program_chair_evaluation_scale_options();
 }
 
 function role_evaluation_question_bank(): array
 {
-    return [
-        [
-            'key' => 'professional_commitment',
-            'code' => 'pcm',
-            'title' => 'PROFESSIONAL COMMITMENT',
-            'questions' => [
-                'Demonstrates integrity, accountability, and professionalism in assigned responsibilities.',
-                'Completes required reports, meetings, and administrative tasks within expected timelines.',
-                'Models respectful conduct and ethical decision-making in official work.',
-                'Shows initiative in improving assigned programs, services, or academic operations.',
-                'Maintains reliable communication with stakeholders and immediate supervisors.',
-            ],
-        ],
-        [
-            'key' => 'leadership_and_supervision',
-            'code' => 'las',
-            'title' => 'LEADERSHIP AND SUPERVISION',
-            'questions' => [
-                'Provides clear direction and guidance to personnel under his or her supervision.',
-                'Monitors assigned work and follows through on agreed action items.',
-                'Uses evidence and institutional priorities when making recommendations.',
-                'Supports personnel development through coaching, feedback, and fair evaluation.',
-                'Handles concerns and conflicts with objectivity and appropriate discretion.',
-            ],
-        ],
-        [
-            'key' => 'program_management',
-            'code' => 'pmg',
-            'title' => 'PROGRAM MANAGEMENT',
-            'questions' => [
-                'Plans activities and resources in alignment with college or campus goals.',
-                'Coordinates academic or administrative processes efficiently with concerned offices.',
-                'Ensures records, schedules, and compliance requirements are organized and updated.',
-                'Identifies operational gaps and recommends practical corrective actions.',
-                'Promotes quality assurance and continuous improvement in assigned functions.',
-            ],
-        ],
-        [
-            'key' => 'collaboration_and_service',
-            'code' => 'cas',
-            'title' => 'COLLABORATION AND SERVICE',
-            'questions' => [
-                'Works constructively with faculty, staff, students, and other offices.',
-                'Responds to legitimate concerns with courtesy, timeliness, and fairness.',
-                'Encourages participation and shared responsibility among team members.',
-                'Communicates policies, expectations, and decisions clearly.',
-                'Contributes to a positive and service-oriented campus environment.',
-            ],
-        ],
-    ];
+    return program_chair_evaluation_question_bank(program_chair_latest_instrument_version());
 }
 
 function ensure_role_evaluation_tables(PDO $pdo): void

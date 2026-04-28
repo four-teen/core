@@ -231,11 +231,15 @@ require __DIR__ . '/_start.php';
         </div>
       </div>
 
+      <?php $benchmarkNumber = 1; ?>
       <?php foreach ($questionBank as $category): ?>
         <div class="col-12">
           <div class="card">
             <div class="card-header">
               <h5 class="mb-0"><?= h($category['title']) ?></h5>
+              <?php if (trim((string) ($category['description'] ?? '')) !== ''): ?>
+                <small class="text-muted"><?= h((string) $category['description']) ?></small>
+              <?php endif; ?>
             </div>
             <div class="card-body">
               <div class="evaluation-question-list">
@@ -245,8 +249,15 @@ require __DIR__ . '/_start.php';
                   <?php $selectedValue = role_evaluation_answer_value($answers, $category, $position); ?>
                   <div class="evaluation-question-card">
                     <div class="evaluation-question-text">
-                      <strong><?= h((string) $position) ?>.</strong>
+                      <strong><?= h((string) $benchmarkNumber) ?>.</strong>
                       <?= h($questionText) ?>
+                      <?php $verificationItems = isset($category['verification'][$position]) && is_array($category['verification'][$position]) ? $category['verification'][$position] : []; ?>
+                      <?php if ($verificationItems !== []): ?>
+                        <div class="text-muted small mt-2">
+                          <span class="fw-semibold">Suggested Means of Verification:</span>
+                          <?= h(implode('; ', $verificationItems)) ?>
+                        </div>
+                      <?php endif; ?>
                     </div>
                     <div class="evaluation-rating-group">
                       <?php foreach ($scaleOptions as $score => $item): ?>
@@ -264,6 +275,7 @@ require __DIR__ . '/_start.php';
                     </div>
                   </div>
                   <?php $position++; ?>
+                  <?php $benchmarkNumber++; ?>
                 <?php endforeach; ?>
               </div>
             </div>
