@@ -11,7 +11,10 @@ $pageDescription = 'Official consolidated faculty performance report for the adm
 $activeAdminPage = 'consolidated_faculty_performance';
 
 $requestedTermKey = trim((string) ($_GET['term_key'] ?? ''));
-$requestedCampus = trim((string) ($_GET['campus'] ?? ''));
+$requestedCampus = trim((string) ($_GET['campus'] ?? 'ISULAN'));
+if ($requestedCampus === '') {
+    $requestedCampus = 'ISULAN';
+}
 $selectedTermKey = '';
 $termOptions = [];
 $report = null;
@@ -21,9 +24,18 @@ try {
     $pdo = db();
     $termOptions = consolidated_faculty_performance_term_options($pdo);
     $selectedTermKey = $requestedTermKey;
+    $defaultTermKey = '';
+    $defaultTermCount = -1;
+
+    foreach ($termOptions as $option) {
+        if ($defaultTermKey === '' || (int) ($option['evaluation_count'] ?? 0) > $defaultTermCount) {
+            $defaultTermKey = (string) ($option['term_key'] ?? '');
+            $defaultTermCount = (int) ($option['evaluation_count'] ?? 0);
+        }
+    }
 
     if ($selectedTermKey === '' && $termOptions !== []) {
-        $selectedTermKey = (string) ($termOptions[0]['term_key'] ?? '');
+        $selectedTermKey = $defaultTermKey;
     }
 
     $termFilter = null;
@@ -31,7 +43,7 @@ try {
         $termFilter = individual_faculty_performance_parse_term_key($selectedTermKey);
 
         if ($termFilter === null) {
-            $selectedTermKey = $termOptions !== [] ? (string) ($termOptions[0]['term_key'] ?? '') : '';
+            $selectedTermKey = $defaultTermKey;
             $termFilter = $selectedTermKey !== ''
                 ? individual_faculty_performance_parse_term_key($selectedTermKey)
                 : null;
@@ -45,9 +57,9 @@ try {
         : 'Unable to load consolidated faculty performance data right now. Please try again.';
 }
 
-$templateImageUrl = asset_url('assets/docs/consolidated-faculty-performance-template.png');
 $bagongPilipinasLogoUrl = asset_url('assets/docs/consolidated-faculty-performance-bagong-pilipinas.png');
 $sksuSealLogoUrl = asset_url('assets/docs/consolidated-faculty-performance-sksu-seal.png');
+$cfpeTemplateImageUrl = asset_url('assets/docs/consolidated-faculty-performance-background.jpg');
 $campusDisplay = consolidated_faculty_performance_display_campus($requestedCampus);
 $unclassifiedFaculty = $report['unclassified'] ?? [];
 $includedCount = (int) ($report['included_count'] ?? 0);
@@ -186,7 +198,8 @@ require __DIR__ . '/_start.php';
 
 <?php if ($report !== null && $includedCount > 0): ?>
   <div class="cfpe-print-shell">
-    <section class="cfpe-paper" style="--cfpe-template-image: url('<?= h($templateImageUrl) ?>');">
+    <section class="cfpe-paper" style="--cfpe-template-image: url('<?= h($cfpeTemplateImageUrl) ?>')">
+      <div class="cfpe-template-band" aria-hidden="true"></div>
       <div class="cfpe-page-header">
         <div class="cfpe-letterhead">
           <img src="<?= h($bagongPilipinasLogoUrl) ?>" alt="Bagong Pilipinas" class="cfpe-letterhead-bagong" />
@@ -204,55 +217,62 @@ require __DIR__ . '/_start.php';
           </div>
         </div>
 
-        <div class="cfpe-values-strip">
-          <span class="cfpe-values-label">VISION:</span>
-          <span>A leading University in advancing scholarly innovation, multi-cultural convergence, and responsive public service in a borderless Region.</span>
-          <span class="cfpe-values-label">MISSION:</span>
-          <span>The University shall primarily provide advanced instruction and professional training in science and technology, agriculture, fisheries, education and other relevant fields of study. It shall also undertake research and extension services, and provide progressive leadership in its areas of specialization.</span>
-          <span class="cfpe-values-label">MAXIM:</span>
-          <span>Generator of Solutions.</span>
-          <span class="cfpe-values-label">CORE VALUES:</span>
-          <span>Patriotism, Respect, Integrity, Zeal, Excellence in Public Service.</span>
-        </div>
-
         <h1 class="cfpe-title">CONSOLIDATED FACULTY PERFORMANCE EVALUATION</h1>
         <p class="cfpe-term-line"><?= h((string) ($report['term_scope']['term_label'] ?? '')) ?></p>
         <p class="cfpe-campus-line"><?= h($campusDisplay) ?></p>
-
-        <div class="cfpe-table-header">
-          <div class="cfpe-header-no">No</div>
-          <div class="cfpe-header-name">NAME OF FACULTY</div>
-          <div class="cfpe-header-rating">FACULTY PERFORMANCE RATING</div>
-          <div class="cfpe-header-student">Students Rating (60%)</div>
-          <div class="cfpe-header-supervisor">Supervisors Rating (40%)</div>
-          <div class="cfpe-header-total">Total (100%)</div>
-        </div>
       </div>
 
       <div class="cfpe-paper-content">
-        <?php foreach (($report['sections'] ?? []) as $section): ?>
-          <div class="cfpe-section-row"><?= h((string) ($section['title'] ?? '')) ?></div>
+        <table class="cfpe-report-table">
+          <colgroup>
+            <col class="cfpe-table-no" />
+            <col class="cfpe-table-name" />
+            <col class="cfpe-table-rating" />
+            <col class="cfpe-table-rating" />
+            <col class="cfpe-table-total" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th rowspan="2">No</th>
+              <th rowspan="2">NAME OF FACULTY</th>
+              <th colspan="3">FACULTY PERFORMANCE RATING</th>
+            </tr>
+            <tr>
+              <th>Students<br />Rating (60%)</th>
+              <th>Supervisors Rating<br />(40%)</th>
+              <th>Total<br />(100%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach (($report['sections'] ?? []) as $section): ?>
+              <tr class="cfpe-section-row">
+                <td colspan="5"><?= h((string) ($section['title'] ?? '')) ?></td>
+              </tr>
 
-          <?php if (($section['rows'] ?? []) === []): ?>
-            <div class="cfpe-data-row cfpe-data-row-empty">
-              <div class="cfpe-data-cell cfpe-col-no">-</div>
-              <div class="cfpe-data-cell cfpe-col-name">No classified faculty with submitted evaluations in this group.</div>
-              <div class="cfpe-data-cell cfpe-col-score">-</div>
-              <div class="cfpe-data-cell cfpe-col-score">-</div>
-              <div class="cfpe-data-cell cfpe-col-score">-</div>
-            </div>
-          <?php endif; ?>
+              <?php if (($section['rows'] ?? []) === []): ?>
+                <?php for ($emptyIndex = 1; $emptyIndex <= 5; $emptyIndex++): ?>
+                  <tr>
+                    <td><?= h((string) $emptyIndex) ?>.</td>
+                    <td>&nbsp;</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                  </tr>
+                <?php endfor; ?>
+              <?php endif; ?>
 
-          <?php foreach (($section['rows'] ?? []) as $row): ?>
-            <div class="cfpe-data-row">
-              <div class="cfpe-data-cell cfpe-col-no"><?= h((string) (($row['row_number'] ?? 0))) ?>.</div>
-              <div class="cfpe-data-cell cfpe-col-name"><?= h((string) ($row['faculty_name'] ?? '')) ?></div>
-              <div class="cfpe-data-cell cfpe-col-score"><?= h(individual_faculty_performance_format_percentage($row['student_weighted_percentage'] ?? null)) ?></div>
-              <div class="cfpe-data-cell cfpe-col-score"><?= h(individual_faculty_performance_format_percentage($row['supervisor_weighted_percentage'] ?? null)) ?></div>
-              <div class="cfpe-data-cell cfpe-col-score cfpe-col-total"><?= h(individual_faculty_performance_format_percentage($row['total_percentage'] ?? null)) ?></div>
-            </div>
-          <?php endforeach; ?>
-        <?php endforeach; ?>
+              <?php foreach (($section['rows'] ?? []) as $row): ?>
+                <tr>
+                  <td><?= h((string) (($row['row_number'] ?? 0))) ?>.</td>
+                  <td><?= h((string) ($row['faculty_name'] ?? '')) ?></td>
+                  <td><?= h(individual_faculty_performance_format_percentage($row['student_weighted_percentage'] ?? null)) ?></td>
+                  <td><?= h(individual_faculty_performance_format_percentage($row['supervisor_weighted_percentage'] ?? null)) ?></td>
+                  <td><?= h(individual_faculty_performance_format_percentage($row['total_percentage'] ?? null)) ?></td>
+                </tr>
+              <?php endforeach; ?>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
 
         <div class="cfpe-signature-stack">
           <div class="cfpe-signature-block">
@@ -289,8 +309,7 @@ require __DIR__ . '/_start.php';
     const content = paper ? paper.querySelector('.cfpe-paper-content') : null;
     const sourceHeader = paper ? paper.querySelector('.cfpe-page-header') : null;
     const pageCandidateSelector = [
-      '.cfpe-section-row',
-      '.cfpe-data-row',
+      '.cfpe-report-table tbody tr',
       '.cfpe-signature-block'
     ].join(', ');
 
@@ -310,15 +329,15 @@ require __DIR__ . '/_start.php';
       return height || 1122;
     };
 
-    const removeRepeatedHeaders = () => {
-      paper.querySelectorAll('.cfpe-page-header-repeat').forEach((header) => {
-        header.remove();
-      });
-    };
-
     const removePageSpacers = () => {
       content.querySelectorAll('.cfpe-page-spacer').forEach((spacer) => {
         spacer.remove();
+      });
+    };
+
+    const removeRepeatedHeaders = () => {
+      paper.querySelectorAll('.cfpe-page-header-repeat').forEach((header) => {
+        header.remove();
       });
     };
 
@@ -383,7 +402,7 @@ require __DIR__ . '/_start.php';
 
       const pageHeight = measureA4PageHeight();
       const contentStyle = window.getComputedStyle(content);
-      const paddingTop = parseFloat(contentStyle.paddingTop) || 0;
+      const paddingTop = (sourceHeader.getBoundingClientRect().height || 0) + (parseFloat(contentStyle.paddingTop) || 0);
       const paddingBottom = parseFloat(contentStyle.paddingBottom) || 0;
       const pageTolerance = 12;
 

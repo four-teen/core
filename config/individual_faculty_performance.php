@@ -495,7 +495,7 @@ function individual_faculty_performance_student_section(PDO $pdo, int $facultyId
     );
 }
 
-function individual_faculty_performance_supervisor_section(PDO $pdo, int $facultyId, array $faculty = []): array
+function individual_faculty_performance_supervisor_section(PDO $pdo, int $facultyId, array $faculty = [], ?array $termFilter = null): array
 {
     ensure_role_evaluation_tables($pdo);
 
@@ -506,7 +506,7 @@ function individual_faculty_performance_supervisor_section(PDO $pdo, int $facult
         'stored_average_rating' => null,
         'last_updated' => '',
     ];
-    $categories = individual_faculty_performance_supervisor_rating_sources($pdo, $facultyId, $faculty, $summary);
+    $categories = individual_faculty_performance_supervisor_rating_sources($pdo, $facultyId, $faculty, $summary, $termFilter);
 
     return individual_faculty_performance_build_rating_section(
         'Supervisors Rating',
@@ -517,7 +517,7 @@ function individual_faculty_performance_supervisor_section(PDO $pdo, int $facult
     );
 }
 
-function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int $facultyId, array $faculty, array &$summary): array
+function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int $facultyId, array $faculty, array &$summary, ?array $termFilter = null): array
 {
     $categoryTotals = [];
     $sourceEvaluationIds = [];
@@ -527,8 +527,7 @@ function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int 
     $lastUpdated = '';
     $programChairUserIds = [];
 
-    $directStatement = $pdo->prepare(
-        "SELECT
+    $directSql = "SELECT
             ev.program_chair_evaluation_id,
             ev.program_chair_user_management_id,
             ev.subject_id,
@@ -541,10 +540,27 @@ function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int 
          LEFT JOIN tbl_program_chair_faculty_evaluation_answers ans
             ON ans.program_chair_evaluation_id = ev.program_chair_evaluation_id
          WHERE ev.faculty_id = :faculty_id
-           AND ev.submission_status = 'submitted'
-         ORDER BY ev.program_chair_evaluation_id ASC, ans.question_order ASC"
-    );
-    $directStatement->execute(['faculty_id' => $facultyId]);
+           AND ev.submission_status = 'submitted'";
+    $directParameters = ['faculty_id' => $facultyId];
+
+    if ($termFilter !== null) {
+        $directSql .= " AND EXISTS (
+            SELECT 1
+            FROM tbl_student_management_enrolled_subjects es
+            WHERE es.faculty_id = ev.faculty_id
+              AND es.subject_id = ev.subject_id
+              AND es.ay_id = :supervisor_ay_id
+              AND es.semester = :supervisor_semester
+              AND es.is_active = 1
+        )";
+        $directParameters['supervisor_ay_id'] = (int) ($termFilter['ay_id'] ?? 0);
+        $directParameters['supervisor_semester'] = (int) ($termFilter['semester'] ?? 0);
+    }
+
+    $directSql .= " ORDER BY ev.program_chair_evaluation_id ASC, ans.question_order ASC";
+
+    $directStatement = $pdo->prepare($directSql);
+    $directStatement->execute($directParameters);
 
     foreach ($directStatement->fetchAll() as $row) {
         $sourceKey = 'program_chair:' . (string) ((int) ($row['program_chair_evaluation_id'] ?? 0));

@@ -1295,7 +1295,7 @@
 
 .cfpe-paper {
   --cfpe-header-top: 0mm;
-  --cfpe-content-top: 81mm;
+  --cfpe-content-top: 0mm;
   box-sizing: border-box;
   width: 210mm;
   height: auto;
@@ -1305,8 +1305,8 @@
   overflow: visible;
   background-color: #fff;
   background-image: var(--cfpe-template-image);
+  background-position: left top;
   background-repeat: repeat-y;
-  background-position: top left;
   background-size: 210mm 297mm;
   color: #111;
   font-family: Arial, Helvetica, sans-serif;
@@ -1315,53 +1315,60 @@
   print-color-adjust: exact;
 }
 
+.cfpe-template-band {
+  display: none;
+}
+
 .cfpe-page-header {
-  position: absolute;
-  top: var(--cfpe-header-top);
-  right: 8mm;
-  left: 15mm;
+  position: relative;
   z-index: 2;
+  padding: 7mm 14mm 0 25mm;
   color: #111;
+}
+
+.cfpe-page-header-repeat {
+  position: absolute;
+  right: 0;
+  left: 0;
 }
 
 .cfpe-letterhead {
   display: grid;
-  grid-template-columns: 22mm 18mm minmax(0, 1fr) 36mm;
+  grid-template-columns: 20mm 19mm minmax(0, 1fr) 40mm;
   align-items: center;
-  gap: 2.2mm;
-  height: 25mm;
-  padding-top: 8mm;
+  gap: 1.6mm;
+  min-height: 30mm;
+  position: relative;
   color: #9ca7a0;
 }
 
 .cfpe-letterhead-bagong {
-  width: 20mm;
-  max-height: 18mm;
+  width: 19mm;
+  max-height: 18.5mm;
   object-fit: contain;
-  transform: translateX(-4mm);
 }
 
 .cfpe-letterhead-seal {
-  width: 17.5mm;
-  height: 17.5mm;
+  width: 18.5mm;
+  height: 18.5mm;
   object-fit: contain;
-  transform: translateX(-4mm);
 }
 
 .cfpe-letterhead-copy {
   min-width: 0;
+  background: rgba(255, 255, 255, 0.74);
   line-height: 1.05;
 }
 
 .cfpe-letterhead-copy div {
   color: #a8afa9;
-  font-size: 7.6pt;
+  font-size: 7.2pt;
 }
 
 .cfpe-letterhead-copy strong {
   display: block;
   color: #93b89b;
-  font-size: 9.8pt;
+  font-size: 9.6pt;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.15;
@@ -1371,15 +1378,19 @@
   display: block;
   color: #9fa7a1;
   font-family: "Times New Roman", Times, serif;
-  font-size: 8pt;
+  font-size: 7.8pt;
   line-height: 1.06;
 }
 
 .cfpe-letterhead-code {
   align-self: end;
-  padding-bottom: 2mm;
-  color: #9da5a1;
-  font-size: 7.2pt;
+  justify-self: end;
+  min-width: 34mm;
+  margin: 0 -7mm -1.5mm 0;
+  padding: 1.2mm 1.6mm;
+  background: rgba(255, 255, 255, 0.96);
+  color: #666;
+  font-size: 7pt;
   line-height: 1.18;
 }
 
@@ -1387,26 +1398,10 @@
   display: block;
 }
 
-.cfpe-values-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35mm 1.2mm;
-  margin: 4mm 0 2.2mm 10mm;
-  color: #4f5d4d;
-  font-family: "Times New Roman", Times, serif;
-  font-size: 5.45pt;
-  line-height: 1.22;
-}
-
-.cfpe-values-label {
-  font-family: Arial, Helvetica, sans-serif;
-  font-weight: 700;
-}
-
 .cfpe-title {
-  margin: 0 0 0.8mm;
+  margin: 6mm 0 0.8mm;
   color: #111;
-  font-size: 10.6pt;
+  font-size: 12pt;
   font-weight: 700;
   line-height: 1.15;
   text-align: center;
@@ -1417,7 +1412,7 @@
 .cfpe-campus-line {
   margin: 0;
   color: #111;
-  font-size: 9.6pt;
+  font-size: 11pt;
   font-weight: 700;
   line-height: 1.2;
   text-align: center;
@@ -1427,80 +1422,10 @@
   margin-bottom: 4.2mm;
 }
 
-.cfpe-table-header,
-.cfpe-data-row {
-  display: grid;
-  grid-template-columns: 12mm minmax(0, 1fr) 31mm 31mm 28mm;
-}
-
-.cfpe-table-header {
-  grid-template-rows: 6.5mm 6.2mm;
-  border: 1px solid #111;
-  background: rgba(255, 255, 255, 0.96);
-}
-
-.cfpe-table-header > div {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.85mm 1mm;
-  border-right: 1px solid #111;
-  border-bottom: 1px solid #111;
-  color: #111;
-  font-size: 6.6pt;
-  font-weight: 700;
-  line-height: 1.16;
-  text-align: center;
-}
-
-.cfpe-table-header > div:last-child {
-  border-right: 0;
-}
-
-.cfpe-header-no {
-  grid-column: 1;
-  grid-row: 1 / span 2;
-}
-
-.cfpe-header-name {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-}
-
-.cfpe-header-rating {
-  grid-column: 3 / span 3;
-  grid-row: 1;
-}
-
-.cfpe-header-student {
-  grid-column: 3;
-  grid-row: 2;
-}
-
-.cfpe-header-supervisor {
-  grid-column: 4;
-  grid-row: 2;
-}
-
-.cfpe-header-total {
-  grid-column: 5;
-  grid-row: 2;
-  border-right: 0 !important;
-}
-
-.cfpe-header-no,
-.cfpe-header-name {
-  border-bottom: 0 !important;
-}
-
-.cfpe-header-rating {
-  border-right: 0 !important;
-}
-
 .cfpe-paper-content {
   position: relative;
   z-index: 1;
-  padding: var(--cfpe-content-top) 9mm 16mm 25mm;
+  padding: 4mm 14mm 16mm 25mm;
   color: #111;
   font-size: 9pt;
   line-height: 1.2;
@@ -1508,73 +1433,74 @@
   box-decoration-break: clone;
 }
 
-.cfpe-section-row {
-  display: block;
-  padding: 1.1mm 2.2mm;
-  border-right: 1px solid #111;
-  border-bottom: 1px solid #111;
-  border-left: 1px solid #111;
-  background: #d8ebca;
+.cfpe-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: #fff;
   color: #111;
-  font-size: 8pt;
+}
+
+.cfpe-table-no {
+  width: 8mm;
+}
+
+.cfpe-table-name {
+  width: auto;
+}
+
+.cfpe-table-rating {
+  width: 22mm;
+}
+
+.cfpe-table-total {
+  width: 23mm;
+}
+
+.cfpe-report-table th,
+.cfpe-report-table td {
+  border: 1px solid #111;
+  padding: 0.65mm 1mm;
+  color: #111;
+  font-size: 7.4pt;
+  line-height: 1.05;
+}
+
+.cfpe-report-table th {
+  background: #a9d18e;
+  font-size: 8.2pt;
   font-weight: 700;
-  line-height: 1.15;
-  break-inside: avoid;
-  page-break-inside: avoid;
-}
-
-.cfpe-data-row {
-  min-height: 5.2mm;
-  color: #111;
-  break-inside: avoid;
-  page-break-inside: avoid;
-}
-
-.cfpe-data-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.9mm 1.2mm;
-  border-right: 1px solid #111;
-  border-bottom: 1px solid #111;
-  background: rgba(255, 255, 255, 0.97);
-  color: #111;
-  font-size: 7.5pt;
-  line-height: 1.2;
   text-align: center;
+  vertical-align: middle;
 }
 
-.cfpe-data-cell:last-child {
-  border-right: 1px solid #111;
+.cfpe-report-table td {
+  height: 4.6mm;
+  text-align: center;
+  vertical-align: middle;
 }
 
-.cfpe-data-cell:first-child {
-  border-left: 1px solid #111;
+.cfpe-report-table td:nth-child(2) {
+  overflow: hidden;
+  font-size: 7.2pt;
+  text-align: left;
+  text-overflow: clip;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.cfpe-col-no {
-  justify-content: flex-start;
-  padding-left: 2mm;
+.cfpe-report-table td:nth-child(5) {
+  background: #f5f7d8;
   font-weight: 700;
 }
 
-.cfpe-col-name {
-  justify-content: flex-start;
+.cfpe-report-table .cfpe-section-row td {
+  height: 4.8mm;
+  background: #d8ebca;
+  font-size: 8.4pt;
+  font-weight: 700;
   text-align: left;
   text-transform: uppercase;
-}
-
-.cfpe-col-score {
-  font-weight: 700;
-}
-
-.cfpe-col-total {
-  background: #f5f7d8;
-}
-
-.cfpe-data-row-empty .cfpe-col-name {
-  text-transform: none;
-  font-style: italic;
 }
 
 .cfpe-signature-stack {
@@ -2026,14 +1952,13 @@
   }
 
   .cfpe-paper {
-    --cfpe-content-top: 75mm;
     width: 210mm !important;
     height: auto !important;
     min-height: var(--cfpe-print-height, 297mm) !important;
     margin: 0 !important;
     overflow: visible !important;
     background-image: var(--cfpe-template-image) !important;
-    background-position: top left !important;
+    background-position: left top !important;
     background-repeat: repeat-y !important;
     background-size: 210mm 297mm !important;
     box-shadow: none !important;
@@ -2041,11 +1966,19 @@
     page-break-inside: auto !important;
   }
 
+  .cfpe-template-band {
+    display: none !important;
+  }
+
   .cfpe-page-header {
     display: block !important;
   }
 
   .cfpe-paper-content {
-    padding: var(--cfpe-content-top) 9mm 16mm 14mm 25mm !important;
+    padding: 4mm 14mm 16mm 25mm !important;
+  }
+
+  .cfpe-report-table thead {
+    display: table-row-group !important;
   }
 }

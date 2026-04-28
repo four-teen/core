@@ -34,7 +34,7 @@ $errorMessage = flash('error');
 
 try {
     $pdo = db();
-    $subjectOptions = program_chair_subject_options($pdo);
+    $subjectOptions = program_chair_subject_options($pdo, $facultyId);
     $context = program_chair_evaluation_context($pdo, $facultyId, $programChairUserId);
 
     if ($context === null) {
@@ -104,7 +104,7 @@ try {
     if ($evaluation !== null) {
         $answers = program_chair_find_evaluation_answers($pdo, (int) $evaluation['program_chair_evaluation_id']);
         $instrumentVersion = program_chair_evaluation_instrument_version_for($evaluation, $answers);
-        $subjectKey = program_chair_subject_key_for_saved_evaluation($pdo, $evaluation);
+        $subjectKey = program_chair_subject_key_for_saved_evaluation($pdo, $evaluation, $facultyId);
         $subjectText = (string) ($evaluation['subject_text'] ?? '');
         $evaluationDate = trim((string) ($evaluation['evaluation_date'] ?? '')) !== ''
             ? (string) $evaluation['evaluation_date']

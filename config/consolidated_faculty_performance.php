@@ -90,10 +90,10 @@ function consolidated_faculty_performance_display_campus(string $campus): string
     $normalized = strtoupper(trim((string) preg_replace('/\s+/', ' ', $campus)));
 
     if ($normalized === '') {
-        return '__________ CAMPUS';
+        return 'ISULAN CAMPUS';
     }
 
-    if (!str_ends_with($normalized, 'CAMPUS')) {
+    if (substr($normalized, -6) !== 'CAMPUS') {
         $normalized .= ' CAMPUS';
     }
 
@@ -150,11 +150,10 @@ function consolidated_faculty_performance_report(PDO $pdo, ?array $termFilter = 
             $faculty
         );
 
-        if ((int) ($studentSection['evaluation_count'] ?? 0) <= 0 && (int) ($supervisorSection['evaluation_count'] ?? 0) <= 0) {
-            continue;
+        if ((int) ($studentSection['evaluation_count'] ?? 0) > 0 || (int) ($supervisorSection['evaluation_count'] ?? 0) > 0) {
+            $evaluatedFacultyCount++;
         }
 
-        $evaluatedFacultyCount++;
         $facultyName = individual_faculty_performance_faculty_name_from_row($faculty);
         $classification = program_chair_normalize_faculty_classification(
             (string) ($faculty['faculty_classification'] ?? ''),

@@ -484,9 +484,12 @@ function program_chair_subject_key(array $subject): string
     );
 }
 
-function program_chair_subject_options(PDO $pdo): array
+function program_chair_subject_options(PDO $pdo, ?int $facultyId = null): array
 {
-    $statement = $pdo->query(
+    $facultyId = $facultyId !== null ? max(0, (int) $facultyId) : 0;
+    $facultyCondition = $facultyId > 0 ? ' AND faculty_id = :faculty_id' : '';
+
+    $statement = $pdo->prepare(
         "SELECT
             MIN(NULLIF(subject_id, 0)) AS sub_id,
             TRIM(subject_code) AS sub_code,
@@ -496,11 +499,13 @@ function program_chair_subject_options(PDO $pdo): array
                 TRIM(COALESCE(subject_code, '')) <> ''
                 OR TRIM(COALESCE(descriptive_title, '')) <> ''
            )
+           " . $facultyCondition . "
          GROUP BY
             TRIM(subject_code),
             TRIM(descriptive_title)
          ORDER BY sub_code ASC, sub_description ASC"
     );
+    $statement->execute($facultyId > 0 ? ['faculty_id' => $facultyId] : []);
 
     $subjects = $statement->fetchAll();
     foreach ($subjects as $index => $subject) {
@@ -511,7 +516,7 @@ function program_chair_subject_options(PDO $pdo): array
     return $subjects;
 }
 
-function program_chair_subject_find_by_key(PDO $pdo, string $subjectKey): ?array
+function program_chair_subject_find_by_key(PDO $pdo, string $subjectKey, ?int $facultyId = null): ?array
 {
     $subjectKey = trim($subjectKey);
 
@@ -519,7 +524,7 @@ function program_chair_subject_find_by_key(PDO $pdo, string $subjectKey): ?array
         return null;
     }
 
-    foreach (program_chair_subject_options($pdo) as $subject) {
+    foreach (program_chair_subject_options($pdo, $facultyId) as $subject) {
         if ((string) ($subject['subject_key'] ?? '') === $subjectKey) {
             return $subject;
         }
@@ -528,13 +533,13 @@ function program_chair_subject_find_by_key(PDO $pdo, string $subjectKey): ?array
     return null;
 }
 
-function program_chair_subject_key_for_saved_evaluation(PDO $pdo, array $evaluation): string
+function program_chair_subject_key_for_saved_evaluation(PDO $pdo, array $evaluation, ?int $facultyId = null): string
 {
     $subjectId = (int) ($evaluation['subject_id'] ?? 0);
     $subjectCode = trim((string) ($evaluation['subject_code'] ?? ''));
     $subjectText = trim((string) ($evaluation['subject_text'] ?? ''));
 
-    foreach (program_chair_subject_options($pdo) as $subject) {
+    foreach (program_chair_subject_options($pdo, $facultyId) as $subject) {
         $optionSubjectId = (int) ($subject['sub_id'] ?? 0);
         $optionSubjectCode = trim((string) ($subject['sub_code'] ?? ''));
         $optionLabel = trim((string) ($subject['subject_label'] ?? ''));
@@ -555,7 +560,7 @@ function program_chair_subject_key_for_saved_evaluation(PDO $pdo, array $evaluat
     return '';
 }
 
-function program_chair_subject_payload(PDO $pdo, string $subjectKey, bool $required): array
+function program_chair_subject_payload(PDO $pdo, string $subjectKey, bool $required, ?int $facultyId = null): array
 {
     $subjectKey = trim($subjectKey);
 
@@ -571,10 +576,10 @@ function program_chair_subject_payload(PDO $pdo, string $subjectKey, bool $requi
         ];
     }
 
-    $subject = program_chair_subject_find_by_key($pdo, $subjectKey);
+    $subject = program_chair_subject_find_by_key($pdo, $subjectKey, $facultyId);
 
     if ($subject === null) {
-        throw new RuntimeException('The selected subject could not be found in the enrolled-subject list.');
+        throw new RuntimeException('The selected subject could not be found for this faculty member.');
     }
 
     return [
@@ -1745,7 +1750,12 @@ function program_chair_save_evaluation_submission(
     ensure_program_chair_tables($pdo);
 
     $isSubmitted = $status === 'submitted';
-    $subjectPayload = program_chair_subject_payload($pdo, $subjectKey, $isSubmitted);
+    $subjectPayload = program_chair_subject_payload(
+        $pdo,
+        $subjectKey,
+        $isSubmitted,
+        (int) ($context['faculty_id'] ?? 0)
+    );
     $subjectText = $subjectPayload['subject_text'];
     $normalizedDate = program_chair_normalize_evaluation_date($evaluationDate, $isSubmitted);
     $normalizedTime = program_chair_normalize_evaluation_time($evaluationTime, $isSubmitted);
