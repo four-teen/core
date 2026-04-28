@@ -43,6 +43,9 @@ if (!isset($activeAdminPage)) {
     <link rel="stylesheet" href="../assets/css/demo.css" />
     <link rel="stylesheet" href="../assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css" />
     <link rel="stylesheet" href="<?= h(asset_url('assets/css/app.css')) ?>" />
+    <?php if (isset($extraHeadContent) && is_string($extraHeadContent)): ?>
+      <?= $extraHeadContent ?>
+    <?php endif; ?>
     <script src="../assets/vendor/js/helpers.js"></script>
     <script src="../assets/js/config.js"></script>
   </head>

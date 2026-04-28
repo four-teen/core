@@ -22,6 +22,10 @@ try {
     $pdo = db();
     $facultyOptions = individual_faculty_performance_faculty_options($pdo);
 
+    if ($selectedFacultyId <= 0 && $facultyOptions !== []) {
+        $selectedFacultyId = (int) ($facultyOptions[0]['faculty_id'] ?? 0);
+    }
+
     if ($selectedFacultyId > 0) {
         $termOptions = individual_faculty_performance_term_options($pdo, $selectedFacultyId);
         $selectedTermKey = $requestedTermKey;
@@ -53,6 +57,47 @@ try {
 $templateImageUrl = asset_url('assets/docs/individual-faculty-performance-template.jpg');
 $bagongPilipinasLogoUrl = asset_url('assets/docs/ifpe-bagong-pilipinas.png');
 $sksuSealLogoUrl = asset_url('assets/docs/ifpe-sksu-seal.png');
+$extraHeadContent = '<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />';
+$extraBodyScripts = <<<'HTML'
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+  window.addEventListener('DOMContentLoaded', function () {
+    var form = document.getElementById('individualFacultyPerformanceFilterForm');
+    var facultySelect = document.getElementById('faculty_id');
+    var termSelect = document.getElementById('term_key');
+
+    if (!form || !facultySelect) {
+      return;
+    }
+
+    function submitSelectedFaculty() {
+      if (facultySelect.value) {
+        form.submit();
+      }
+    }
+
+    if (window.jQuery && jQuery.fn.select2) {
+      jQuery(facultySelect).select2({
+        width: '100%',
+        placeholder: 'Search faculty name',
+        allowClear: false
+      });
+
+      jQuery(facultySelect).on('select2:select change', submitSelectedFaculty);
+    }
+
+    facultySelect.addEventListener('change', submitSelectedFaculty);
+
+    if (termSelect) {
+      termSelect.addEventListener('change', function () {
+        if (facultySelect.value) {
+          form.submit();
+        }
+      });
+    }
+  });
+</script>
+HTML;
 
 require __DIR__ . '/_start.php';
 ?>
@@ -64,25 +109,21 @@ require __DIR__ . '/_start.php';
   <div class="col-12">
     <div class="card">
       <div class="card-header">
-        <h5 class="mb-0">Select Faculty and Show Performance</h5>
+        <h5 class="mb-0">Select Faculty</h5>
         <small class="text-muted">The official sheet below uses the attached PDF background as one unified report.</small>
       </div>
       <div class="card-body">
-        <form method="get" action="<?= h(base_url('administrator/individual_faculty_performance.php')) ?>">
+        <form method="get" action="<?= h(base_url('administrator/individual_faculty_performance.php')) ?>" id="individualFacultyPerformanceFilterForm">
           <div class="row g-3 align-items-end">
             <div class="col-lg-5">
               <label for="faculty_id" class="form-label">Faculty</label>
-              <select class="form-select" id="faculty_id" name="faculty_id" required>
-                <option value="">Select faculty</option>
+              <select class="form-select ifpe-faculty-select" id="faculty_id" name="faculty_id" required>
                 <?php foreach ($facultyOptions as $facultyOption): ?>
                   <?php
                   $optionFacultyId = (int) ($facultyOption['faculty_id'] ?? 0);
-                  $studentCount = (int) ($facultyOption['student_evaluation_count'] ?? 0);
-                  $supervisorCount = (int) ($facultyOption['supervisor_evaluation_count'] ?? 0);
                   ?>
                   <option value="<?= h((string) $optionFacultyId) ?>" <?= $optionFacultyId === $selectedFacultyId ? 'selected' : '' ?>>
                     <?= h((string) ($facultyOption['faculty_name'] ?? '')) ?>
-                    (<?= h(format_number($studentCount)) ?> student, <?= h(format_number($supervisorCount)) ?> supervisor)
                   </option>
                 <?php endforeach; ?>
               </select>
@@ -107,19 +148,14 @@ require __DIR__ . '/_start.php';
               </select>
             </div>
 
-            <div class="col-lg-3">
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary flex-fill">
-                  <i class="bx bx-show me-1"></i>
-                  Show Performance
+            <?php if ($report !== null): ?>
+              <div class="col-lg-3">
+                <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                  <i class="bx bx-printer me-1"></i>
+                  Print
                 </button>
-                <?php if ($report !== null): ?>
-                  <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
-                    <i class="bx bx-printer"></i>
-                  </button>
-                <?php endif; ?>
               </div>
-            </div>
+            <?php endif; ?>
           </div>
         </form>
       </div>
@@ -355,7 +391,9 @@ require __DIR__ . '/_start.php';
               <?= h(trim((string) ($report['evaluated_by_name'] ?? '')) !== '' ? (string) $report['evaluated_by_name'] : ' ') ?>
             </strong>
             <div class="ifpe-signature-line"></div>
-            <span class="ifpe-signature-role">Chairperson, Faculty Performance Evaluation</span>
+            <span class="ifpe-signature-role">
+              <?= h(trim((string) ($report['evaluated_by_designation'] ?? '')) !== '' ? (string) $report['evaluated_by_designation'] : 'Dean') ?>, Faculty Performance Evaluation
+            </span>
           </div>
           <div class="ifpe-signature-block">
             <p>Recommending Approval:</p>

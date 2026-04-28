@@ -157,11 +157,7 @@ function individual_faculty_performance_faculty_options(PDO $pdo): array
                 COALESCE(sr.student_evaluation_count, 0) > 0
                 OR COALESCE(pr.supervisor_evaluation_count, 0) > 0
            )
-         ORDER BY
-            (COALESCE(sr.student_evaluation_count, 0) + COALESCE(pr.supervisor_evaluation_count, 0)) DESC,
-            f.last_name ASC,
-            f.first_name ASC,
-            f.faculty_id ASC"
+         ORDER BY f.last_name ASC, f.first_name ASC, f.middle_name ASC, f.faculty_id ASC"
     );
 
     $rows = $statement->fetchAll();
@@ -251,6 +247,7 @@ function individual_faculty_performance_report(PDO $pdo, int $facultyId, ?array 
 
     $isComplete = $studentPercentage !== null && $supervisorPercentage !== null;
     $termScope = individual_faculty_performance_term_scope($termFilter, $termOptions);
+    $evaluatorSignatory = individual_faculty_performance_evaluator_signatory($pdo, $facultyId, $faculty);
 
     return [
         'faculty' => $faculty,
@@ -260,7 +257,8 @@ function individual_faculty_performance_report(PDO $pdo, int $facultyId, ?array 
         'current_percentage' => $currentPercentage,
         'is_complete' => $isComplete,
         'rating_label' => individual_faculty_performance_rating_label($currentPercentage, $isComplete),
-        'evaluated_by_name' => individual_faculty_performance_program_chair_evaluator_name($pdo, $facultyId),
+        'evaluated_by_name' => $evaluatorSignatory['name'],
+        'evaluated_by_designation' => $evaluatorSignatory['designation'],
         'comments' => individual_faculty_performance_comments($pdo, $facultyId, $termFilter, 12, $faculty),
     ];
 }
@@ -311,6 +309,123 @@ function individual_faculty_performance_program_chair_evaluator_name(PDO $pdo, i
         'full_name' => (string) ($row['full_name'] ?? ''),
         'email_address' => (string) ($row['email_address'] ?? ''),
     ]);
+}
+
+function individual_faculty_performance_evaluator_signatory(PDO $pdo, int $facultyId, array $faculty): array
+{
+    $programChairUserIds = [];
+    $deanUserIds = [];
+
+    $statement = $pdo->prepare(
+        "SELECT DISTINCT program_chair_user_management_id
+         FROM tbl_program_chair_faculty_evaluations
+         WHERE faculty_id = :faculty_id
+           AND program_chair_user_management_id > 0"
+    );
+    $statement->execute(['faculty_id' => $facultyId]);
+
+    foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $programChairUserId) {
+        $programChairUserIds[(int) $programChairUserId] = true;
+    }
+
+    $facultyUser = individual_faculty_performance_faculty_user_management($pdo, $faculty);
+    $facultyUserRole = $facultyUser !== null
+        ? user_management_normalize_role((string) ($facultyUser['account_role'] ?? ''))
+        : '';
+    $facultyUserId = $facultyUser !== null ? (int) ($facultyUser['user_management_id'] ?? 0) : 0;
+
+    if ($facultyUserRole === 'program_chair' && $facultyUserId > 0) {
+        $programChairUserIds[$facultyUserId] = true;
+    }
+
+    if ($facultyUserRole === 'dean' && $facultyUserId > 0) {
+        $deanUserIds[$facultyUserId] = true;
+    }
+
+    $deanSignatory = individual_faculty_performance_latest_role_signatory(
+        $pdo,
+        'dean',
+        'program_chair',
+        array_keys($programChairUserIds)
+    );
+
+    if ($deanSignatory !== null) {
+        $deanUserId = (int) ($deanSignatory['user_id'] ?? 0);
+        if ($deanUserId > 0) {
+            $deanUserIds[$deanUserId] = true;
+        }
+    }
+
+    foreach (individual_faculty_performance_dean_user_ids_for_program_chairs($pdo, array_keys($programChairUserIds)) as $deanUserId) {
+        $deanUserIds[$deanUserId] = true;
+    }
+
+    $directorSignatory = individual_faculty_performance_latest_role_signatory(
+        $pdo,
+        'director',
+        'dean',
+        array_keys($deanUserIds)
+    );
+
+    if ($directorSignatory !== null) {
+        return [
+            'name' => (string) $directorSignatory['name'],
+            'designation' => 'Director',
+        ];
+    }
+
+    if ($deanSignatory !== null) {
+        return [
+            'name' => (string) $deanSignatory['name'],
+            'designation' => 'Dean',
+        ];
+    }
+
+    return [
+        'name' => '',
+        'designation' => 'Dean',
+    ];
+}
+
+function individual_faculty_performance_latest_role_signatory(PDO $pdo, string $evaluatorRole, string $targetRole, array $targetUserIds): ?array
+{
+    $targetUserIds = array_values(array_unique(array_filter(array_map('intval', $targetUserIds))));
+    if ($targetUserIds === []) {
+        return null;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($targetUserIds), '?'));
+    $statement = $pdo->prepare(
+        "SELECT
+            ev.evaluator_user_management_id,
+            evaluator.full_name AS evaluator_name,
+            evaluator.email_address AS evaluator_email
+         FROM tbl_role_evaluations ev
+         LEFT JOIN tbl_user_management evaluator
+            ON evaluator.user_management_id = ev.evaluator_user_management_id
+         WHERE ev.evaluator_role = ?
+           AND ev.evaluatee_role = ?
+           AND ev.submission_status = 'submitted'
+           AND ev.evaluatee_user_management_id IN (" . $placeholders . ")
+         ORDER BY
+            COALESCE(ev.final_submitted_at, ev.updated_at, ev.completed_at, ev.created_at) DESC,
+            ev.role_evaluation_id DESC
+         LIMIT 1"
+    );
+    $statement->execute(array_merge([$evaluatorRole, $targetRole], $targetUserIds));
+
+    $row = $statement->fetch();
+    if (!$row) {
+        return null;
+    }
+
+    return [
+        'user_id' => (int) ($row['evaluator_user_management_id'] ?? 0),
+        'name' => role_evaluation_user_display_name([
+            'full_name' => (string) ($row['evaluator_name'] ?? ''),
+            'email_address' => (string) ($row['evaluator_email'] ?? ''),
+        ]),
+    ];
 }
 
 function individual_faculty_performance_student_section(PDO $pdo, int $facultyId, ?array $termFilter): array
