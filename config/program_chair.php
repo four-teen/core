@@ -813,6 +813,394 @@ function program_chair_role_evaluation_count_rows(PDO $pdo, string $evaluatorRol
     return $statement->fetchAll();
 }
 
+function program_chair_admin_faculty_evaluation_details(PDO $pdo, int $facultyId, string $evaluationType): array
+{
+    ensure_evaluation_subject_scope($pdo);
+    ensure_program_chair_tables($pdo);
+    ensure_role_evaluation_tables($pdo);
+
+    if ($facultyId <= 0) {
+        return [];
+    }
+
+    if ($evaluationType === 'student') {
+        $statement = $pdo->prepare(
+            "SELECT
+                ev.evaluation_id,
+                ev.student_number,
+                ev.subject_code,
+                ev.subject_summary,
+                ev.term_label,
+                ev.comment_text,
+                ev.question_count,
+                ev.total_score,
+                ev.average_rating,
+                ev.submission_status,
+                ev.updated_at,
+                ev.completed_at,
+                CONCAT_WS(' ', sm.first_name, sm.middle_name, sm.last_name, sm.suffix_name) AS student_name,
+                sm.email_address AS student_email
+             FROM tbl_student_faculty_evaluations ev
+             LEFT JOIN tbl_student_management sm
+                ON sm.student_id = ev.student_id
+             WHERE ev.faculty_id = :faculty_id
+               AND ev.student_enrollment_id IS NOT NULL
+             ORDER BY ev.updated_at DESC, ev.evaluation_id DESC"
+        );
+        $statement->execute(['faculty_id' => $facultyId]);
+
+        $rows = [];
+        foreach ($statement->fetchAll() as $row) {
+            $rows[] = [
+                'type' => 'student',
+                'id' => (int) ($row['evaluation_id'] ?? 0),
+                'actor' => trim((string) ($row['student_name'] ?? '')) !== ''
+                    ? trim((string) ($row['student_name'] ?? ''))
+                    : (string) ($row['student_number'] ?? 'Student'),
+                'actorMeta' => trim((string) ($row['student_email'] ?? '')),
+                'subject' => trim((string) ($row['subject_code'] ?? '')) !== ''
+                    ? trim((string) ($row['subject_code'] ?? '') . ' - ' . (string) ($row['subject_summary'] ?? ''))
+                    : (string) ($row['subject_summary'] ?? ''),
+                'term' => (string) ($row['term_label'] ?? ''),
+                'date' => '',
+                'time' => '',
+                'comment' => (string) ($row['comment_text'] ?? ''),
+                'questionCount' => (int) ($row['question_count'] ?? 0),
+                'totalScore' => (int) ($row['total_score'] ?? 0),
+                'averageRating' => (float) ($row['average_rating'] ?? 0),
+                'status' => (string) ($row['submission_status'] ?? 'draft'),
+                'updatedAt' => (string) ($row['updated_at'] ?? $row['completed_at'] ?? ''),
+                'editUrl' => '',
+            ];
+        }
+
+        return $rows;
+    }
+
+    $statement = $pdo->prepare(
+        "SELECT
+            ev.program_chair_evaluation_id,
+            ev.program_chair_user_management_id,
+            ev.subject_code,
+            ev.subject_text,
+            ev.evaluation_date,
+            ev.evaluation_time,
+            ev.comment_text,
+            ev.question_count,
+            ev.total_score,
+            ev.average_rating,
+            ev.submission_status,
+            ev.updated_at,
+            ev.completed_at,
+            um.full_name AS evaluator_name,
+            um.email_address AS evaluator_email
+         FROM tbl_program_chair_faculty_evaluations ev
+         LEFT JOIN tbl_user_management um
+            ON um.user_management_id = ev.program_chair_user_management_id
+         WHERE ev.faculty_id = :faculty_id
+         ORDER BY ev.updated_at DESC, ev.program_chair_evaluation_id DESC"
+    );
+    $statement->execute(['faculty_id' => $facultyId]);
+
+    $rows = [];
+    $programChairUserIds = [];
+    foreach ($statement->fetchAll() as $row) {
+        $programChairUserId = (int) ($row['program_chair_user_management_id'] ?? 0);
+        if ($programChairUserId > 0) {
+            $programChairUserIds[$programChairUserId] = true;
+        }
+
+        $evaluatorName = role_evaluation_user_display_name([
+            'full_name' => (string) ($row['evaluator_name'] ?? ''),
+            'email_address' => (string) ($row['evaluator_email'] ?? ''),
+        ]);
+
+        $rows[] = [
+            'type' => 'supervisory',
+            'id' => (int) ($row['program_chair_evaluation_id'] ?? 0),
+            'actor' => $evaluatorName !== '' ? $evaluatorName : 'Program Chair',
+            'actorMeta' => (string) ($row['evaluator_email'] ?? ''),
+            'subject' => trim((string) ($row['subject_code'] ?? '')) !== ''
+                ? trim((string) ($row['subject_code'] ?? '') . ' - ' . (string) ($row['subject_text'] ?? ''))
+                : (string) ($row['subject_text'] ?? ''),
+            'term' => '',
+            'date' => (string) ($row['evaluation_date'] ?? ''),
+            'time' => substr((string) ($row['evaluation_time'] ?? ''), 0, 5),
+            'comment' => (string) ($row['comment_text'] ?? ''),
+            'questionCount' => (int) ($row['question_count'] ?? 0),
+            'totalScore' => (int) ($row['total_score'] ?? 0),
+            'averageRating' => (float) ($row['average_rating'] ?? 0),
+            'status' => (string) ($row['submission_status'] ?? 'draft'),
+            'updatedAt' => (string) ($row['updated_at'] ?? $row['completed_at'] ?? ''),
+            'editUrl' => base_url('programchair/evaluate.php?faculty_id=' . (int) $facultyId),
+        ];
+    }
+
+    $faculty = individual_faculty_performance_faculty($pdo, $facultyId);
+    $facultyUser = $faculty !== null ? individual_faculty_performance_faculty_user_management($pdo, $faculty) : null;
+    $facultyUserRole = $facultyUser !== null
+        ? user_management_normalize_role((string) ($facultyUser['account_role'] ?? ''))
+        : '';
+    $facultyUserId = $facultyUser !== null ? (int) ($facultyUser['user_management_id'] ?? 0) : 0;
+
+    if ($facultyUserRole === 'program_chair' && $facultyUserId > 0) {
+        $programChairUserIds[$facultyUserId] = true;
+    }
+
+    $deanUserIds = [];
+    if ($facultyUserRole === 'dean' && $facultyUserId > 0) {
+        $deanUserIds[$facultyUserId] = true;
+    }
+
+    foreach (program_chair_admin_role_evaluation_detail_rows($pdo, 'dean', 'program_chair', array_keys($programChairUserIds), 'Dean') as $row) {
+        $rows[] = $row;
+        $deanUserId = (int) ($row['evaluatorUserId'] ?? 0);
+        if ($deanUserId > 0) {
+            $deanUserIds[$deanUserId] = true;
+        }
+    }
+
+    foreach (individual_faculty_performance_dean_user_ids_for_program_chairs($pdo, array_keys($programChairUserIds)) as $deanUserId) {
+        $deanUserIds[$deanUserId] = true;
+    }
+
+    foreach (program_chair_admin_role_evaluation_detail_rows($pdo, 'director', 'dean', array_keys($deanUserIds), 'Director') as $row) {
+        $rows[] = $row;
+    }
+
+    usort($rows, static function (array $left, array $right): int {
+        return strcmp((string) ($right['updatedAt'] ?? ''), (string) ($left['updatedAt'] ?? ''));
+    });
+
+    return $rows;
+}
+
+function program_chair_admin_role_evaluation_detail_rows(PDO $pdo, string $evaluatorRole, string $targetRole, array $targetUserIds, string $roleLabel): array
+{
+    $targetUserIds = array_values(array_unique(array_filter(array_map('intval', $targetUserIds))));
+    if ($targetUserIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($targetUserIds), '?'));
+    $statement = $pdo->prepare(
+        "SELECT
+            ev.role_evaluation_id,
+            ev.evaluator_user_management_id,
+            ev.evaluatee_user_management_id,
+            ev.evaluatee_role,
+            ev.evaluatee_name,
+            ev.comment_text,
+            ev.question_count,
+            ev.total_score,
+            ev.average_rating,
+            ev.submission_status,
+            ev.updated_at,
+            ev.completed_at,
+            evaluator.full_name AS evaluator_name,
+            evaluator.email_address AS evaluator_email,
+            evaluatee.full_name AS evaluatee_user_name,
+            evaluatee.email_address AS evaluatee_email
+         FROM tbl_role_evaluations ev
+         LEFT JOIN tbl_user_management evaluator
+            ON evaluator.user_management_id = ev.evaluator_user_management_id
+         LEFT JOIN tbl_user_management evaluatee
+            ON evaluatee.user_management_id = ev.evaluatee_user_management_id
+         WHERE ev.evaluator_role = ?
+           AND ev.evaluatee_role = ?
+           AND ev.evaluatee_user_management_id IN (" . $placeholders . ")
+         ORDER BY ev.updated_at DESC, ev.role_evaluation_id DESC"
+    );
+    $statement->execute(array_merge([$evaluatorRole, $targetRole], $targetUserIds));
+
+    $rows = [];
+    foreach ($statement->fetchAll() as $row) {
+        $evaluatorName = role_evaluation_user_display_name([
+            'full_name' => (string) ($row['evaluator_name'] ?? ''),
+            'email_address' => (string) ($row['evaluator_email'] ?? ''),
+        ]);
+        $evaluateeName = role_evaluation_user_display_name([
+            'full_name' => (string) ($row['evaluatee_user_name'] ?? $row['evaluatee_name'] ?? ''),
+            'email_address' => (string) ($row['evaluatee_email'] ?? ''),
+        ]);
+
+        $rows[] = [
+            'type' => 'role',
+            'id' => (int) ($row['role_evaluation_id'] ?? 0),
+            'evaluatorUserId' => (int) ($row['evaluator_user_management_id'] ?? 0),
+            'actor' => $evaluatorName !== '' ? $evaluatorName : $roleLabel,
+            'actorMeta' => (string) ($row['evaluator_email'] ?? ''),
+            'subject' => $roleLabel . ' evaluation for ' . ($evaluateeName !== '' ? $evaluateeName : user_management_role_label($targetRole)),
+            'term' => user_management_role_label($targetRole),
+            'date' => '',
+            'time' => '',
+            'comment' => (string) ($row['comment_text'] ?? ''),
+            'questionCount' => (int) ($row['question_count'] ?? 0),
+            'totalScore' => (int) ($row['total_score'] ?? 0),
+            'averageRating' => (float) ($row['average_rating'] ?? 0),
+            'status' => (string) ($row['submission_status'] ?? 'draft'),
+            'updatedAt' => (string) ($row['updated_at'] ?? $row['completed_at'] ?? ''),
+            'editUrl' => '',
+        ];
+    }
+
+    return $rows;
+}
+
+function program_chair_admin_update_evaluation(PDO $pdo, string $evaluationType, int $evaluationId, array $payload): void
+{
+    ensure_evaluation_subject_scope($pdo);
+    ensure_program_chair_tables($pdo);
+    ensure_role_evaluation_tables($pdo);
+
+    $status = strtolower(trim((string) ($payload['submission_status'] ?? 'draft')));
+    if (!in_array($status, ['draft', 'submitted'], true)) {
+        throw new RuntimeException('Please select a valid evaluation status.');
+    }
+
+    $commentText = trim((string) ($payload['comment_text'] ?? ''));
+
+    if ($evaluationType === 'student') {
+        $statement = $pdo->prepare(
+            "UPDATE tbl_student_faculty_evaluations
+             SET submission_status = :submission_status,
+                 comment_text = :comment_text,
+                 final_submitted_at = CASE
+                    WHEN :final_status = 'submitted' AND final_submitted_at IS NULL THEN NOW()
+                    WHEN :clear_status = 'draft' THEN NULL
+                    ELSE final_submitted_at
+                 END,
+                 updated_at = NOW()
+             WHERE evaluation_id = :evaluation_id"
+        );
+        $statement->execute([
+            'submission_status' => $status,
+            'comment_text' => $commentText,
+            'final_status' => $status,
+            'clear_status' => $status,
+            'evaluation_id' => $evaluationId,
+        ]);
+
+        return;
+    }
+
+    if ($evaluationType === 'role') {
+        $statement = $pdo->prepare(
+            "UPDATE tbl_role_evaluations
+             SET submission_status = :submission_status,
+                 comment_text = :comment_text,
+                 final_submitted_at = CASE
+                    WHEN :final_status = 'submitted' AND final_submitted_at IS NULL THEN NOW()
+                    WHEN :clear_status = 'draft' THEN NULL
+                    ELSE final_submitted_at
+                 END,
+                 updated_at = NOW()
+             WHERE role_evaluation_id = :role_evaluation_id"
+        );
+        $statement->execute([
+            'submission_status' => $status,
+            'comment_text' => $commentText,
+            'final_status' => $status,
+            'clear_status' => $status,
+            'role_evaluation_id' => $evaluationId,
+        ]);
+
+        return;
+    }
+
+    $evaluationDate = program_chair_normalize_evaluation_date(trim((string) ($payload['evaluation_date'] ?? '')), false);
+    $evaluationTime = program_chair_normalize_evaluation_time(trim((string) ($payload['evaluation_time'] ?? '')), false);
+    $statement = $pdo->prepare(
+        "UPDATE tbl_program_chair_faculty_evaluations
+         SET submission_status = :submission_status,
+             evaluation_date = :evaluation_date,
+             evaluation_time = :evaluation_time,
+             comment_text = :comment_text,
+             final_submitted_at = CASE
+                WHEN :final_status = 'submitted' AND final_submitted_at IS NULL THEN NOW()
+                WHEN :clear_status = 'draft' THEN NULL
+                ELSE final_submitted_at
+             END,
+             updated_at = NOW()
+         WHERE program_chair_evaluation_id = :program_chair_evaluation_id"
+    );
+    $statement->execute([
+        'submission_status' => $status,
+        'evaluation_date' => $evaluationDate,
+        'evaluation_time' => $evaluationTime,
+        'comment_text' => $commentText,
+        'final_status' => $status,
+        'clear_status' => $status,
+        'program_chair_evaluation_id' => $evaluationId,
+    ]);
+
+}
+
+function program_chair_admin_delete_evaluation(PDO $pdo, string $evaluationType, int $evaluationId): void
+{
+    ensure_evaluation_subject_scope($pdo);
+    ensure_program_chair_tables($pdo);
+    ensure_role_evaluation_tables($pdo);
+
+    if ($evaluationId <= 0) {
+        throw new RuntimeException('Please select a valid evaluation row.');
+    }
+
+    $pdo->beginTransaction();
+
+    try {
+        if ($evaluationType === 'student') {
+            $answerStatement = $pdo->prepare(
+                "DELETE FROM tbl_student_faculty_evaluation_answers
+                 WHERE evaluation_id = :evaluation_id"
+            );
+            $answerStatement->execute(['evaluation_id' => $evaluationId]);
+
+            $evaluationStatement = $pdo->prepare(
+                "DELETE FROM tbl_student_faculty_evaluations
+                 WHERE evaluation_id = :evaluation_id"
+            );
+            $evaluationStatement->execute(['evaluation_id' => $evaluationId]);
+        } elseif ($evaluationType === 'role') {
+            $answerStatement = $pdo->prepare(
+                "DELETE FROM tbl_role_evaluation_answers
+                 WHERE role_evaluation_id = :role_evaluation_id"
+            );
+            $answerStatement->execute(['role_evaluation_id' => $evaluationId]);
+
+            $evaluationStatement = $pdo->prepare(
+                "DELETE FROM tbl_role_evaluations
+                 WHERE role_evaluation_id = :role_evaluation_id"
+            );
+            $evaluationStatement->execute(['role_evaluation_id' => $evaluationId]);
+        } else {
+            $answerStatement = $pdo->prepare(
+                "DELETE FROM tbl_program_chair_faculty_evaluation_answers
+                 WHERE program_chair_evaluation_id = :program_chair_evaluation_id"
+            );
+            $answerStatement->execute(['program_chair_evaluation_id' => $evaluationId]);
+
+            $evaluationStatement = $pdo->prepare(
+                "DELETE FROM tbl_program_chair_faculty_evaluations
+                 WHERE program_chair_evaluation_id = :program_chair_evaluation_id"
+            );
+            $evaluationStatement->execute(['program_chair_evaluation_id' => $evaluationId]);
+        }
+
+        if ($evaluationStatement->rowCount() <= 0) {
+            throw new RuntimeException('The selected evaluation row could not be found.');
+        }
+
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+
+        throw $exception;
+    }
+}
+
 function program_chair_faculty_add(PDO $pdo, int $facultyId, string $classification, int $createdByUserId): void
 {
     ensure_program_chair_tables($pdo);

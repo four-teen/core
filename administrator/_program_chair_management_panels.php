@@ -99,7 +99,16 @@
                 </td>
                 <td>
                   <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span><?= h(format_number($faculty['student_evaluation_count'] ?? 0)) ?> total</span>
+                    <button
+                      type="button"
+                      class="btn btn-link p-0 text-primary fw-semibold"
+                      data-program-chair-evaluation-details
+                      data-faculty-id="<?= h((string) ($faculty['faculty_id'] ?? 0)) ?>"
+                      data-faculty-name="<?= h((string) ($faculty['faculty_name'] ?? 'Faculty')) ?>"
+                      data-evaluation-type="student"
+                    >
+                      <?= h(format_number($faculty['student_evaluation_count'] ?? 0)) ?> total
+                    </button>
                     <span class="badge bg-label-success"><?= h(format_average($faculty['student_average_rating'] ?? null)) ?></span>
                   </div>
                   <small class="text-muted">
@@ -109,7 +118,16 @@
                 </td>
                 <td>
                   <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span><?= h(format_number($faculty['supervisory_evaluation_count'] ?? 0)) ?> total</span>
+                    <button
+                      type="button"
+                      class="btn btn-link p-0 text-primary fw-semibold"
+                      data-program-chair-evaluation-details
+                      data-faculty-id="<?= h((string) ($faculty['faculty_id'] ?? 0)) ?>"
+                      data-faculty-name="<?= h((string) ($faculty['faculty_name'] ?? 'Faculty')) ?>"
+                      data-evaluation-type="supervisory"
+                    >
+                      <?= h(format_number($faculty['supervisory_evaluation_count'] ?? 0)) ?> total
+                    </button>
                     <span class="badge bg-label-warning"><?= h(format_average($faculty['supervisory_average_rating'] ?? null)) ?></span>
                   </div>
                   <small class="text-muted">
