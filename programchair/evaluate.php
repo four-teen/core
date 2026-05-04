@@ -133,6 +133,31 @@ $extraBodyScripts = <<<'HTML'
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
   window.addEventListener('DOMContentLoaded', function () {
+    function syncRatingGroup(ratingInput) {
+      var group = ratingInput.closest('.evaluation-rating-group');
+
+      if (!group) {
+        return;
+      }
+
+      group.querySelectorAll('.evaluation-rating-option').forEach(function (option) {
+        option.classList.remove('active');
+      });
+
+      var checkedInput = group.querySelector('.evaluation-rating-option input[type="radio"]:checked');
+      var selectedOption = checkedInput ? checkedInput.closest('.evaluation-rating-option') : null;
+      if (selectedOption) {
+        selectedOption.classList.add('active');
+      }
+    }
+
+    document.querySelectorAll('.program-chair-evaluation-form .evaluation-rating-option input[type="radio"]').forEach(function (ratingInput) {
+      syncRatingGroup(ratingInput);
+      ratingInput.addEventListener('change', function () {
+        syncRatingGroup(ratingInput);
+      });
+    });
+
     if (!window.jQuery || !jQuery.fn.select2) {
       return;
     }
@@ -223,7 +248,7 @@ require __DIR__ . '/_start.php';
     </div>
   <?php endif; ?>
 
-  <form method="post" action="<?= h(base_url('programchair/evaluate.php?faculty_id=' . (string) $facultyId)) ?>">
+  <form method="post" action="<?= h(base_url('programchair/evaluate.php?faculty_id=' . (string) $facultyId)) ?>" class="program-chair-evaluation-form">
     <input type="hidden" name="csrf_token" value="<?= h(csrf_token()) ?>" />
     <input type="hidden" name="faculty_id" value="<?= h((string) $facultyId) ?>" />
 
@@ -310,7 +335,7 @@ require __DIR__ . '/_start.php';
                     </div>
                     <div class="evaluation-rating-group">
                       <?php foreach ($scaleOptions as $score => $item): ?>
-                        <label class="evaluation-rating-option <?= $selectedValue === $score ? 'active' : '' ?>">
+                        <label class="evaluation-rating-option">
                           <input
                             type="radio"
                             name="answers[<?= h($questionKey) ?>]"
