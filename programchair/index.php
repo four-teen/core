@@ -265,12 +265,13 @@ require __DIR__ . '/_start.php';
               <th>Average</th>
               <th>Status</th>
               <th>Updated</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
             <?php if ($recentEvaluations === []): ?>
               <tr>
-                <td colspan="6" class="text-center text-muted py-4">
+                <td colspan="7" class="text-center text-muted py-4">
                   No supervisory evaluations have been started yet.
                 </td>
               </tr>
@@ -293,6 +294,15 @@ require __DIR__ . '/_start.php';
                   </span>
                 </td>
                 <td><?= h(format_datetime((string) ($evaluation['updated_at'] ?? ''))) ?></td>
+                <td>
+                  <a
+                    href="<?= h(base_url('programchair/evaluate.php?faculty_id=' . (string) ($evaluation['faculty_id'] ?? '0'))) ?>"
+                    class="btn btn-outline-primary btn-sm"
+                  >
+                    <i class="bx bx-edit me-1"></i>
+                    Edit
+                  </a>
+                </td>
               </tr>
             <?php endforeach; ?>
           </tbody>

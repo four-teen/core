@@ -12,9 +12,9 @@ function program_chair_faculty_card_button(array $faculty): array
 
     if ($status === 'submitted') {
         $button = [
-            'label' => 'View Submission',
+            'label' => 'Edit Submission',
             'class' => 'btn-success',
-            'icon' => 'bx-show',
+            'icon' => 'bx-edit',
         ];
     } elseif ($status === 'draft') {
         $button = [

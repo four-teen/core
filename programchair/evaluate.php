@@ -49,11 +49,6 @@ try {
             throw new RuntimeException('Unable to verify the request. Please refresh the page and try again.');
         }
 
-        if (($evaluation['submission_status'] ?? '') === 'submitted') {
-            flash('error', 'This supervisory evaluation has already been submitted and can no longer be changed.');
-            redirect_to('programchair/evaluate.php?faculty_id=' . (string) $facultyId);
-        }
-
         $action = (string) ($_POST['action'] ?? '');
         $subjectKey = trim((string) ($_POST['subject_key'] ?? ''));
         $evaluationDate = trim((string) ($_POST['evaluation_date'] ?? ''));
@@ -67,6 +62,10 @@ try {
             throw new RuntimeException('Invalid supervisory evaluation action.');
         }
 
+        if (($evaluation['submission_status'] ?? '') === 'submitted' && $action === 'save_draft') {
+            throw new RuntimeException('Submitted supervisory evaluations can only be updated by resubmitting the completed form.');
+        }
+
         if (
             $action === 'save_draft'
             && $subjectKey === ''
@@ -78,6 +77,7 @@ try {
             throw new RuntimeException('Select at least one rating or add evaluation details before saving a draft.');
         }
 
+        $wasSubmitted = ($evaluation['submission_status'] ?? '') === 'submitted';
         $status = $action === 'submit_evaluation' ? 'submitted' : 'draft';
         $evaluation = program_chair_create_or_get_evaluation($pdo, $context);
         $evaluation = program_chair_save_evaluation_submission(
@@ -93,7 +93,10 @@ try {
         );
 
         if ($status === 'submitted') {
-            flash('notice', 'The supervisory faculty evaluation has been submitted successfully.');
+            $submittedMessage = $wasSubmitted
+                ? 'The supervisory faculty evaluation has been updated successfully.'
+                : 'The supervisory faculty evaluation has been submitted successfully.';
+            flash('notice', $submittedMessage);
             redirect_to('programchair/index.php');
         }
 
@@ -215,8 +218,8 @@ require __DIR__ . '/_start.php';
   </div>
 
   <?php if ($isSubmitted): ?>
-    <div class="alert alert-success" role="alert">
-      This supervisory evaluation was submitted on <?= h(format_datetime((string) ($evaluation['final_submitted_at'] ?? $evaluation['updated_at'] ?? ''))) ?>.
+    <div class="alert alert-info" role="alert">
+      This supervisory evaluation was submitted on <?= h(format_datetime((string) ($evaluation['final_submitted_at'] ?? $evaluation['updated_at'] ?? ''))) ?>. You may adjust the details and resubmit the completed form.
     </div>
   <?php endif; ?>
 
@@ -239,7 +242,6 @@ require __DIR__ . '/_start.php';
                   id="subject_key"
                   name="subject_key"
                   data-placeholder="Search subject"
-                  <?= $isSubmitted ? 'disabled' : '' ?>
                 >
                   <option value=""></option>
                   <?php if ($subjectKey === '' && trim($subjectText) !== ''): ?>
@@ -252,9 +254,6 @@ require __DIR__ . '/_start.php';
                     </option>
                   <?php endforeach; ?>
                 </select>
-                <?php if ($isSubmitted): ?>
-                  <input type="hidden" name="subject_key" value="<?= h($subjectKey) ?>" />
-                <?php endif; ?>
               </div>
               <div class="col-md-3">
                 <label for="evaluation_date" class="form-label">Date</label>
@@ -264,7 +263,6 @@ require __DIR__ . '/_start.php';
                   id="evaluation_date"
                   name="evaluation_date"
                   value="<?= h($evaluationDate) ?>"
-                  <?= $isSubmitted ? 'readonly' : '' ?>
                 />
               </div>
               <div class="col-md-3">
@@ -275,7 +273,6 @@ require __DIR__ . '/_start.php';
                   id="evaluation_time"
                   name="evaluation_time"
                   value="<?= h($evaluationTime) ?>"
-                  <?= $isSubmitted ? 'readonly' : '' ?>
                 />
               </div>
             </div>
@@ -319,7 +316,6 @@ require __DIR__ . '/_start.php';
                             name="answers[<?= h($questionKey) ?>]"
                             value="<?= h((string) $score) ?>"
                             <?= $selectedValue === $score ? 'checked' : '' ?>
-                            <?= $isSubmitted ? 'disabled' : '' ?>
                           />
                           <span><?= h((string) $score) ?></span>
                         </label>
@@ -346,26 +342,25 @@ require __DIR__ . '/_start.php';
               name="comment_text"
               rows="5"
               placeholder="Share supervisory comments or suggestions here."
-              <?= $isSubmitted ? 'readonly' : '' ?>
             ><?= h($commentText) ?></textarea>
           </div>
         </div>
       </div>
 
-      <?php if (!$isSubmitted): ?>
-        <div class="col-12">
-          <div class="d-flex flex-column flex-md-row gap-3 justify-content-end">
+      <div class="col-12">
+        <div class="d-flex flex-column flex-md-row gap-3 justify-content-end">
+          <?php if (!$isSubmitted): ?>
             <button type="submit" name="action" value="save_draft" class="btn btn-outline-primary">
               <i class="bx bx-save me-1"></i>
               Save Draft
             </button>
-            <button type="submit" name="action" value="submit_evaluation" class="btn btn-primary">
-              <i class="bx bx-check-circle me-1"></i>
-              Submit Evaluation
-            </button>
-          </div>
+          <?php endif; ?>
+          <button type="submit" name="action" value="submit_evaluation" class="btn btn-primary">
+            <i class="bx bx-check-circle me-1"></i>
+            <?= $isSubmitted ? 'Update Evaluation' : 'Submit Evaluation' ?>
+          </button>
         </div>
-      <?php endif; ?>
+      </div>
     </div>
   </form>
 <?php endif; ?>
