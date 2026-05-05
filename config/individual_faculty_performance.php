@@ -231,7 +231,7 @@ function individual_faculty_performance_report(PDO $pdo, int $facultyId, ?array 
     }
 
     $studentSection = individual_faculty_performance_student_section($pdo, $facultyId, $termFilter);
-    $supervisorSection = individual_faculty_performance_supervisor_section($pdo, $facultyId, $faculty);
+    $supervisorSection = individual_faculty_performance_supervisor_section($pdo, $facultyId, $faculty, $termFilter);
 
     if ((int) $studentSection['evaluation_count'] <= 0 && (int) $supervisorSection['evaluation_count'] <= 0) {
         return null;

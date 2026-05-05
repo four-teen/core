@@ -114,6 +114,12 @@ if (!isset($activeAdminPage)) {
                 <div>Individual Faculty Performance</div>
               </a>
             </li>
+            <li class="menu-item <?= $activeAdminPage === 'faculty_evaluation_feedback_report' ? 'active' : '' ?>">
+              <a href="<?= h(base_url('administrator/faculty_evaluation_feedback_report.php')) ?>" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-file-find"></i>
+                <div>Faculty Evaluation Feedback Report</div>
+              </a>
+            </li>
             <li class="menu-item <?= $activeAdminPage === 'consolidated_faculty_performance' ? 'active' : '' ?>">
               <a href="<?= h(base_url('administrator/consolidated_faculty_performance.php')) ?>" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-table"></i>

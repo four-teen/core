@@ -49,3 +49,4 @@ require_once __DIR__ . '/program_chair.php';
 require_once __DIR__ . '/role_evaluation.php';
 require_once __DIR__ . '/individual_faculty_performance.php';
 require_once __DIR__ . '/consolidated_faculty_performance.php';
+require_once __DIR__ . '/faculty_evaluation_feedback_report.php';
