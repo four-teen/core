@@ -221,6 +221,7 @@ function ensure_program_chair_tables(PDO $pdo): void
             program_chair_faculty_id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             faculty_id INT UNSIGNED NOT NULL,
             faculty_classification VARCHAR(40) NOT NULL DEFAULT '',
+            faculty_program_code VARCHAR(20) NOT NULL DEFAULT '',
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             created_by_user_management_id INT UNSIGNED NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -230,6 +231,20 @@ function ensure_program_chair_tables(PDO $pdo): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     program_chair_ensure_faculty_columns($pdo);
+
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS tbl_program_chair_user_programs (
+            program_chair_user_program_id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            program_chair_user_management_id INT UNSIGNED NOT NULL,
+            program_code VARCHAR(20) NOT NULL DEFAULT '',
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_by_user_management_id INT UNSIGNED NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_program_chair_user_program (program_chair_user_management_id),
+            KEY idx_program_chair_user_program_code (program_code, is_active)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
 
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS tbl_program_chair_faculty_evaluations (
@@ -291,6 +306,70 @@ function program_chair_faculty_classification_options(): array
     ];
 }
 
+function program_chair_program_codes(): array
+{
+    return ['BSIT', 'BSIS', 'BSCS'];
+}
+
+function program_chair_program_options(PDO $pdo): array
+{
+    $codes = program_chair_program_codes();
+    $options = [];
+
+    foreach ($codes as $code) {
+        $options[$code] = [
+            'program_code' => $code,
+            'program_label' => $code,
+            'program_name' => '',
+        ];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($codes), '?'));
+    $statement = $pdo->prepare(
+        "SELECT program_code, program_name
+         FROM tbl_program
+         WHERE status = 'active'
+           AND UPPER(program_code) IN (" . $placeholders . ")
+         ORDER BY FIELD(UPPER(program_code), " . implode(',', array_fill(0, count($codes), '?')) . "), program_id ASC"
+    );
+    $statement->execute(array_merge($codes, $codes));
+
+    foreach ($statement->fetchAll() as $row) {
+        $code = program_chair_normalize_program_code((string) ($row['program_code'] ?? ''), true);
+        if ($code === '' || !isset($options[$code]) || $options[$code]['program_name'] !== '') {
+            continue;
+        }
+
+        $name = trim((string) ($row['program_name'] ?? ''));
+        $options[$code]['program_name'] = $name;
+        $options[$code]['program_label'] = $name !== '' ? $code . ' - ' . $name : $code;
+    }
+
+    return $options;
+}
+
+function program_chair_normalize_program_code(string $programCode, bool $allowEmpty = false): string
+{
+    $normalized = strtoupper(trim(preg_replace('/\s+/', ' ', $programCode) ?? ''));
+
+    if ($normalized === '' && $allowEmpty) {
+        return '';
+    }
+
+    if (!in_array($normalized, program_chair_program_codes(), true)) {
+        throw new RuntimeException('Please select a valid program.');
+    }
+
+    return $normalized;
+}
+
+function program_chair_program_label(string $programCode): string
+{
+    $normalized = program_chair_normalize_program_code($programCode, true);
+
+    return $normalized !== '' ? $normalized : 'Not set';
+}
+
 function program_chair_normalize_faculty_classification(string $classification, bool $allowEmpty = false): string
 {
     $normalized = strtoupper(trim(preg_replace('/\s+/', ' ', $classification) ?? ''));
@@ -343,6 +422,14 @@ function program_chair_ensure_faculty_columns(PDO $pdo): void
             $pdo,
             "ALTER TABLE tbl_program_chair_faculty
              ADD COLUMN faculty_classification VARCHAR(40) NOT NULL DEFAULT '' AFTER faculty_id"
+        );
+    }
+
+    if (!isset($columns['faculty_program_code'])) {
+        program_chair_add_column_if_missing(
+            $pdo,
+            "ALTER TABLE tbl_program_chair_faculty
+             ADD COLUMN faculty_program_code VARCHAR(20) NOT NULL DEFAULT '' AFTER faculty_classification"
         );
     }
 }
@@ -648,6 +735,7 @@ function program_chair_selected_faculty_list(PDO $pdo): array
             pcf.program_chair_faculty_id,
             pcf.faculty_id,
             pcf.faculty_classification,
+            pcf.faculty_program_code,
             pcf.is_active,
             pcf.created_at,
             pcf.updated_at,
@@ -699,6 +787,8 @@ function program_chair_selected_faculty_list(PDO $pdo): array
     $rows = $statement->fetchAll();
     foreach ($rows as $index => $row) {
         $rows[$index]['faculty_name'] = program_chair_faculty_name_from_row($row);
+        $rows[$index]['faculty_program_code'] = program_chair_normalize_program_code((string) ($row['faculty_program_code'] ?? ''), true);
+        $rows[$index]['faculty_program_label'] = program_chair_program_label((string) ($row['faculty_program_code'] ?? ''));
         $roleCounts = program_chair_faculty_role_supervisory_counts($pdo, $row);
         $rows[$index]['supervisory_evaluation_count'] = (int) ($row['program_chair_evaluation_count'] ?? 0) + $roleCounts['evaluation_count'];
         $rows[$index]['supervisory_submitted_count'] = (int) ($row['program_chair_submitted_count'] ?? 0) + $roleCounts['submitted_count'];
@@ -711,6 +801,116 @@ function program_chair_selected_faculty_list(PDO $pdo): array
     }
 
     return $rows;
+}
+
+function program_chair_user_program_assignments(PDO $pdo): array
+{
+    ensure_program_chair_tables($pdo);
+    ensure_user_management_table($pdo);
+
+    $statement = $pdo->query(
+        "SELECT
+            um.user_management_id,
+            um.full_name,
+            um.email_address,
+            um.account_role,
+            um.is_active,
+            assignment.program_code
+         FROM tbl_user_management um
+         LEFT JOIN tbl_program_chair_user_programs assignment
+            ON assignment.program_chair_user_management_id = um.user_management_id
+           AND assignment.is_active = 1
+         WHERE um.account_role = 'program_chair'
+           AND um.is_active = 1
+         ORDER BY um.full_name ASC, um.email_address ASC"
+    );
+
+    $rows = $statement->fetchAll();
+    foreach ($rows as $index => $row) {
+        $rows[$index]['display_name'] = role_evaluation_user_display_name($row);
+        $rows[$index]['program_code'] = program_chair_normalize_program_code((string) ($row['program_code'] ?? ''), true);
+        $rows[$index]['program_label'] = program_chair_program_label((string) ($row['program_code'] ?? ''));
+    }
+
+    return $rows;
+}
+
+function program_chair_user_program_code(PDO $pdo, int $programChairUserManagementId): string
+{
+    ensure_program_chair_tables($pdo);
+
+    if ($programChairUserManagementId <= 0) {
+        return '';
+    }
+
+    $statement = $pdo->prepare(
+        "SELECT program_code
+         FROM tbl_program_chair_user_programs
+         WHERE program_chair_user_management_id = :program_chair_user_management_id
+           AND is_active = 1
+         LIMIT 1"
+    );
+    $statement->execute(['program_chair_user_management_id' => $programChairUserManagementId]);
+
+    return program_chair_normalize_program_code((string) ($statement->fetchColumn() ?: ''), true);
+}
+
+function program_chair_faculty_program_code(PDO $pdo, int $facultyId): string
+{
+    ensure_program_chair_tables($pdo);
+
+    if ($facultyId <= 0) {
+        return '';
+    }
+
+    $statement = $pdo->prepare(
+        "SELECT faculty_program_code
+         FROM tbl_program_chair_faculty
+         WHERE faculty_id = :faculty_id
+           AND is_active = 1
+         LIMIT 1"
+    );
+    $statement->execute(['faculty_id' => $facultyId]);
+
+    return program_chair_normalize_program_code((string) ($statement->fetchColumn() ?: ''), true);
+}
+
+function program_chair_program_signatory(PDO $pdo, string $programCode): ?array
+{
+    ensure_program_chair_tables($pdo);
+
+    $programCode = program_chair_normalize_program_code($programCode, true);
+    if ($programCode === '') {
+        return null;
+    }
+
+    $statement = $pdo->prepare(
+        "SELECT um.user_management_id, um.full_name, um.email_address
+         FROM tbl_program_chair_user_programs assignment
+         INNER JOIN tbl_user_management um
+            ON um.user_management_id = assignment.program_chair_user_management_id
+         WHERE assignment.program_code = :program_code
+           AND assignment.is_active = 1
+           AND um.account_role = 'program_chair'
+           AND um.is_active = 1
+         ORDER BY assignment.updated_at DESC, assignment.program_chair_user_program_id DESC
+         LIMIT 1"
+    );
+    $statement->execute(['program_code' => $programCode]);
+    $row = $statement->fetch();
+
+    if (!$row) {
+        return null;
+    }
+
+    return [
+        'user_id' => (int) ($row['user_management_id'] ?? 0),
+        'name' => role_evaluation_user_display_name([
+            'full_name' => (string) ($row['full_name'] ?? ''),
+            'email_address' => (string) ($row['email_address'] ?? ''),
+        ]),
+        'program_code' => $programCode,
+    ];
 }
 
 function program_chair_faculty_role_supervisory_counts(PDO $pdo, array $faculty): array
@@ -1206,7 +1406,7 @@ function program_chair_admin_delete_evaluation(PDO $pdo, string $evaluationType,
     }
 }
 
-function program_chair_faculty_add(PDO $pdo, int $facultyId, string $classification, int $createdByUserId): void
+function program_chair_faculty_add(PDO $pdo, int $facultyId, string $classification, string $programCode, int $createdByUserId): void
 {
     ensure_program_chair_tables($pdo);
 
@@ -1215,6 +1415,7 @@ function program_chair_faculty_add(PDO $pdo, int $facultyId, string $classificat
     }
 
     $classification = program_chair_normalize_faculty_classification($classification);
+    $programCode = program_chair_normalize_program_code($programCode);
 
     $statement = $pdo->prepare(
         "SELECT faculty_id
@@ -1233,16 +1434,19 @@ function program_chair_faculty_add(PDO $pdo, int $facultyId, string $classificat
         "INSERT INTO tbl_program_chair_faculty (
             faculty_id,
             faculty_classification,
+            faculty_program_code,
             is_active,
             created_by_user_management_id
          ) VALUES (
             :faculty_id,
             :faculty_classification,
+            :faculty_program_code,
             1,
             :created_by_user_management_id
          )
          ON DUPLICATE KEY UPDATE
             faculty_classification = VALUES(faculty_classification),
+            faculty_program_code = VALUES(faculty_program_code),
             is_active = 1,
             created_by_user_management_id = VALUES(created_by_user_management_id),
             updated_at = NOW()"
@@ -1250,11 +1454,12 @@ function program_chair_faculty_add(PDO $pdo, int $facultyId, string $classificat
     $insertStatement->execute([
         'faculty_id' => $facultyId,
         'faculty_classification' => $classification,
+        'faculty_program_code' => $programCode,
         'created_by_user_management_id' => $createdByUserId > 0 ? $createdByUserId : null,
     ]);
 }
 
-function program_chair_faculty_update_classification(PDO $pdo, int $programChairFacultyId, string $classification): void
+function program_chair_faculty_update_classification(PDO $pdo, int $programChairFacultyId, string $classification, ?string $programCode = null): void
 {
     ensure_program_chair_tables($pdo);
 
@@ -1263,16 +1468,75 @@ function program_chair_faculty_update_classification(PDO $pdo, int $programChair
     }
 
     $classification = program_chair_normalize_faculty_classification($classification);
+    $programCode = $programCode !== null ? program_chair_normalize_program_code($programCode) : null;
+
+    $setSql = "faculty_classification = :faculty_classification";
+    $parameters = [
+        'faculty_classification' => $classification,
+        'program_chair_faculty_id' => $programChairFacultyId,
+    ];
+
+    if ($programCode !== null) {
+        $setSql .= ", faculty_program_code = :faculty_program_code";
+        $parameters['faculty_program_code'] = $programCode;
+    }
 
     $statement = $pdo->prepare(
         "UPDATE tbl_program_chair_faculty
-         SET faculty_classification = :faculty_classification,
+         SET " . $setSql . ",
              updated_at = NOW()
          WHERE program_chair_faculty_id = :program_chair_faculty_id"
     );
+    $statement->execute($parameters);
+}
+
+function program_chair_user_program_update(PDO $pdo, int $programChairUserManagementId, string $programCode, int $createdByUserId): void
+{
+    ensure_program_chair_tables($pdo);
+    ensure_user_management_table($pdo);
+
+    if ($programChairUserManagementId <= 0) {
+        throw new RuntimeException('Please select a valid program chair account.');
+    }
+
+    $programCode = program_chair_normalize_program_code($programCode);
+
+    $userStatement = $pdo->prepare(
+        "SELECT user_management_id
+         FROM tbl_user_management
+         WHERE user_management_id = :user_management_id
+           AND account_role = 'program_chair'
+           AND is_active = 1
+         LIMIT 1"
+    );
+    $userStatement->execute(['user_management_id' => $programChairUserManagementId]);
+
+    if (!$userStatement->fetch()) {
+        throw new RuntimeException('The selected program chair account could not be found.');
+    }
+
+    $statement = $pdo->prepare(
+        "INSERT INTO tbl_program_chair_user_programs (
+            program_chair_user_management_id,
+            program_code,
+            is_active,
+            created_by_user_management_id
+         ) VALUES (
+            :program_chair_user_management_id,
+            :program_code,
+            1,
+            :created_by_user_management_id
+         )
+         ON DUPLICATE KEY UPDATE
+            program_code = VALUES(program_code),
+            is_active = 1,
+            created_by_user_management_id = VALUES(created_by_user_management_id),
+            updated_at = NOW()"
+    );
     $statement->execute([
-        'faculty_classification' => $classification,
-        'program_chair_faculty_id' => $programChairFacultyId,
+        'program_chair_user_management_id' => $programChairUserManagementId,
+        'program_code' => $programCode,
+        'created_by_user_management_id' => $createdByUserId > 0 ? $createdByUserId : null,
     ]);
 }
 
@@ -1297,13 +1561,24 @@ function program_chair_evaluation_summary(PDO $pdo, int $programChairUserId): ar
 {
     ensure_program_chair_tables($pdo);
 
+    $eligibleCondition = "pcf.is_active = 1 AND f.status = 'active'";
+    $parameters = [
+        'summary_user_id' => $programChairUserId,
+        'draft_user_id' => $programChairUserId,
+        'average_user_id' => $programChairUserId,
+    ];
+    $programChairProgramCode = program_chair_user_program_code($pdo, $programChairUserId);
+    if ($programChairProgramCode !== '') {
+        $eligibleCondition .= " AND pcf.faculty_program_code = :eligible_program_code";
+        $parameters['eligible_program_code'] = $programChairProgramCode;
+    }
+
     $statement = $pdo->prepare(
         "SELECT
             (SELECT COUNT(*)
              FROM tbl_program_chair_faculty pcf
              INNER JOIN tbl_faculty f ON f.faculty_id = pcf.faculty_id
-             WHERE pcf.is_active = 1
-               AND f.status = 'active') AS eligible_faculty,
+             WHERE " . $eligibleCondition . ") AS eligible_faculty,
             (SELECT COUNT(*)
              FROM tbl_program_chair_faculty_evaluations
              WHERE program_chair_user_management_id = :summary_user_id
@@ -1324,11 +1599,7 @@ function program_chair_evaluation_summary(PDO $pdo, int $programChairUserId): ar
              WHERE program_chair_user_management_id = :average_user_id
                AND submission_status = 'submitted') AS average_rating"
     );
-    $statement->execute([
-        'summary_user_id' => $programChairUserId,
-        'draft_user_id' => $programChairUserId,
-        'average_user_id' => $programChairUserId,
-    ]);
+    $statement->execute($parameters);
 
     return $statement->fetch() ?: [
         'eligible_faculty' => 0,
@@ -1349,6 +1620,7 @@ function program_chair_faculty_for_evaluation(PDO $pdo, int $programChairUserId,
             f.first_name,
             f.middle_name,
             f.ext_name,
+            pcf.faculty_program_code,
             ev.program_chair_evaluation_id,
             ev.subject_id,
             ev.subject_code,
@@ -1381,6 +1653,12 @@ function program_chair_faculty_for_evaluation(PDO $pdo, int $programChairUserId,
            AND f.status = 'active'";
 
     $parameters = ['program_chair_user_management_id' => $programChairUserId];
+    $programChairProgramCode = program_chair_user_program_code($pdo, $programChairUserId);
+    if ($programChairProgramCode !== '') {
+        $sql .= " AND pcf.faculty_program_code = :program_chair_program_code";
+        $parameters['program_chair_program_code'] = $programChairProgramCode;
+    }
+
     $search = trim($search);
 
     if ($search !== '') {
@@ -1409,6 +1687,7 @@ function program_chair_faculty_for_evaluation(PDO $pdo, int $programChairUserId,
     $rows = $statement->fetchAll();
     foreach ($rows as $index => $row) {
         $rows[$index]['faculty_name'] = program_chair_faculty_name_from_row($row);
+        $rows[$index]['faculty_program_code'] = program_chair_normalize_program_code((string) ($row['faculty_program_code'] ?? ''), true);
         $submissionStatus = (string) ($row['submission_status'] ?? '');
         $evaluatorName = trim((string) ($row['evaluator_full_name'] ?? ''));
 
@@ -1464,23 +1743,30 @@ function program_chair_evaluation_context(PDO $pdo, int $facultyId, int $program
 {
     ensure_program_chair_tables($pdo);
 
-    $statement = $pdo->prepare(
-        "SELECT
+    $sql = "SELECT
             pcf.program_chair_faculty_id,
             f.faculty_id,
             f.last_name,
             f.first_name,
             f.middle_name,
             f.ext_name,
+            pcf.faculty_program_code,
             f.status
          FROM tbl_program_chair_faculty pcf
          INNER JOIN tbl_faculty f ON f.faculty_id = pcf.faculty_id
          WHERE pcf.is_active = 1
            AND f.status = 'active'
-           AND pcf.faculty_id = :faculty_id
-         LIMIT 1"
-    );
-    $statement->execute(['faculty_id' => $facultyId]);
+           AND pcf.faculty_id = :faculty_id";
+    $parameters = ['faculty_id' => $facultyId];
+    $programChairProgramCode = program_chair_user_program_code($pdo, $programChairUserId);
+    if ($programChairProgramCode !== '') {
+        $sql .= " AND pcf.faculty_program_code = :program_chair_program_code";
+        $parameters['program_chair_program_code'] = $programChairProgramCode;
+    }
+    $sql .= " LIMIT 1";
+
+    $statement = $pdo->prepare($sql);
+    $statement->execute($parameters);
     $context = $statement->fetch();
 
     if (!$context) {

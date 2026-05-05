@@ -392,12 +392,12 @@ require __DIR__ . '/_start.php';
             </strong>
             <div class="ifpe-signature-line"></div>
             <span class="ifpe-signature-role">
-              <?= h(trim((string) ($report['evaluated_by_designation'] ?? '')) !== '' ? (string) $report['evaluated_by_designation'] : 'Dean') ?>, Faculty Performance Evaluation
+              <?= h(trim((string) ($report['evaluated_by_designation'] ?? '')) !== '' ? (string) $report['evaluated_by_designation'] : 'Chairperson') ?>, Faculty Performance Evaluation
             </span>
           </div>
           <div class="ifpe-signature-block">
             <p>Recommending Approval:</p>
-            <strong class="ifpe-signature-name">ELBREN O. ANTONIO, DIT</strong>
+            <strong class="ifpe-signature-name"><?= h(trim((string) ($report['college_dean_name'] ?? '')) !== '' ? (string) $report['college_dean_name'] : 'ELBREN O. ANTONIO, DIT') ?></strong>
             <div class="ifpe-signature-line"></div>
             <span class="ifpe-signature-role">College Dean</span>
           </div>

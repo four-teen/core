@@ -34,9 +34,12 @@ $databaseError = null;
 $managementError = null;
 $facultyOptions = [];
 $selectedFaculty = [];
+$programOptions = [];
+$programChairPrograms = [];
 $addFacultyForm = [
     'faculty_id' => '',
     'faculty_classification' => '',
+    'faculty_program_code' => '',
 ];
 $stats = [
     'master_faculty' => 0,
@@ -79,11 +82,13 @@ try {
             $addFacultyForm = [
                 'faculty_id' => trim((string) ($_POST['faculty_id'] ?? '')),
                 'faculty_classification' => trim((string) ($_POST['faculty_classification'] ?? '')),
+                'faculty_program_code' => trim((string) ($_POST['faculty_program_code'] ?? '')),
             ];
             program_chair_faculty_add(
                 $pdo,
                 (int) $addFacultyForm['faculty_id'],
                 $addFacultyForm['faculty_classification'],
+                $addFacultyForm['faculty_program_code'],
                 (int) ($administrator['user_management_id'] ?? 0)
             );
 
@@ -96,9 +101,22 @@ try {
             program_chair_faculty_update_classification(
                 $pdo,
                 (int) ($_POST['program_chair_faculty_id'] ?? 0),
-                trim((string) ($_POST['faculty_classification'] ?? ''))
+                trim((string) ($_POST['faculty_classification'] ?? '')),
+                trim((string) ($_POST['faculty_program_code'] ?? ''))
             );
-            $ajaxNoticeMessage = 'Faculty classification was updated successfully.';
+            $ajaxNoticeMessage = 'Faculty program assignment was updated successfully.';
+            if (!$isAjaxRequest) {
+                flash('notice', $ajaxNoticeMessage);
+                redirect_to('administrator/program_chair.php');
+            }
+        } elseif ($action === 'update_program_chair_program') {
+            program_chair_user_program_update(
+                $pdo,
+                (int) ($_POST['program_chair_user_management_id'] ?? 0),
+                trim((string) ($_POST['program_code'] ?? '')),
+                (int) ($administrator['user_management_id'] ?? 0)
+            );
+            $ajaxNoticeMessage = 'Program chair program was updated successfully.';
             if (!$isAjaxRequest) {
                 flash('notice', $ajaxNoticeMessage);
                 redirect_to('administrator/program_chair.php');
@@ -152,8 +170,10 @@ try {
     ensure_program_chair_tables($pdo);
     $stats['master_faculty'] = program_chair_master_faculty_count($pdo);
     $stats['eligible_faculty'] = program_chair_faculty_list_count($pdo);
+    $programOptions = program_chair_program_options($pdo);
     $facultyOptions = program_chair_faculty_options($pdo);
     $selectedFaculty = program_chair_selected_faculty_list($pdo);
+    $programChairPrograms = program_chair_user_program_assignments($pdo);
 } catch (Throwable $exception) {
     $databaseError = is_local_env()
         ? 'Unable to load program chair faculty data. ' . $exception->getMessage()
@@ -178,6 +198,8 @@ if ($isAjaxRequest && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'facultyOptions' => $facultyOptions,
                 'selectedFaculty' => $selectedFaculty,
                 'addFacultyForm' => $addFacultyForm,
+                'programOptions' => $programOptions,
+                'programChairPrograms' => $programChairPrograms,
             ]
         ),
         'hero' => [
@@ -255,6 +277,8 @@ require __DIR__ . '/_start.php';
           'facultyOptions' => $facultyOptions,
           'selectedFaculty' => $selectedFaculty,
           'addFacultyForm' => $addFacultyForm,
+          'programOptions' => $programOptions,
+          'programChairPrograms' => $programChairPrograms,
       ]
   ) ?>
 </div>
@@ -264,7 +288,7 @@ require __DIR__ . '/_start.php';
       <form method="post" action="<?= h(base_url('administrator/program_chair.php')) ?>" id="programChairClassificationForm">
         <div class="modal-header">
           <div>
-            <h5 class="modal-title" id="programChairClassificationModalLabel">Update Faculty Classification</h5>
+            <h5 class="modal-title" id="programChairClassificationModalLabel">Update Faculty Assignment</h5>
             <small class="text-muted d-block" id="programChairClassificationFacultyName">Faculty</small>
           </div>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -275,12 +299,22 @@ require __DIR__ . '/_start.php';
           <input type="hidden" name="action" value="update_faculty_classification" />
           <input type="hidden" name="program_chair_faculty_id" id="programChairClassificationFacultyId" value="" />
 
-          <div class="mb-0">
+          <div class="mb-3">
             <label for="programChairClassificationSelect" class="form-label">Faculty Classification</label>
             <select class="form-select" id="programChairClassificationSelect" name="faculty_classification" required>
               <option value="">Select classification</option>
               <?php foreach (program_chair_faculty_classification_options() as $classificationValue => $classificationLabel): ?>
                 <option value="<?= h($classificationValue) ?>"><?= h($classificationLabel) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+
+          <div class="mb-0">
+            <label for="programChairProgramSelect" class="form-label">Faculty Program</label>
+            <select class="form-select" id="programChairProgramSelect" name="faculty_program_code" required>
+              <option value="">Select program</option>
+              <?php foreach ($programOptions as $programCode => $programOption): ?>
+                <option value="<?= h((string) $programCode) ?>"><?= h((string) ($programOption['program_label'] ?? $programCode)) ?></option>
               <?php endforeach; ?>
             </select>
           </div>
@@ -389,6 +423,7 @@ require __DIR__ . '/_start.php';
     var modalFacultyId = document.getElementById('programChairClassificationFacultyId');
     var modalFacultyName = document.getElementById('programChairClassificationFacultyName');
     var modalSelect = document.getElementById('programChairClassificationSelect');
+    var modalProgramSelect = document.getElementById('programChairProgramSelect');
     var modalError = document.getElementById('programChairClassificationError');
     var evaluationDetailsModalElement = document.getElementById('programChairEvaluationDetailsModal');
     var evaluationDetailsTitle = document.getElementById('programChairEvaluationDetailsModalLabel');
@@ -784,6 +819,10 @@ require __DIR__ . '/_start.php';
 
       if (modalSelect) {
         modalSelect.value = trigger.getAttribute('data-program-chair-faculty-classification') || '';
+      }
+
+      if (modalProgramSelect) {
+        modalProgramSelect.value = trigger.getAttribute('data-program-chair-faculty-program') || '';
       }
 
       if (modalError) {
