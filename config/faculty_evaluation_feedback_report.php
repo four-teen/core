@@ -30,15 +30,15 @@ function faculty_evaluation_feedback_report_report(
         return null;
     }
 
-    $programCode = program_chair_faculty_program_code($pdo, $facultyId);
     $subjects = faculty_evaluation_feedback_report_subjects($pdo, $facultyId, $termFilter);
+    $programCode = faculty_evaluation_feedback_report_program_code($pdo, $facultyId, $report['faculty'], $subjects);
     $analysis = faculty_evaluation_feedback_report_analysis($report);
 
     $report['feedback'] = [
         'program_code' => $programCode,
         'program_label' => faculty_evaluation_feedback_report_program_label($pdo, $programCode),
         'subjects' => $subjects,
-        'subject_line' => faculty_evaluation_feedback_report_limited_list($subjects, 6),
+        'subject_line' => faculty_evaluation_feedback_report_limited_list($subjects),
         'term_line' => faculty_evaluation_feedback_report_term_line($report),
         'key_areas' => faculty_evaluation_feedback_report_key_areas(),
         'supervisor_remark' => faculty_evaluation_feedback_report_source_remark($report['supervisor']),
@@ -51,6 +51,81 @@ function faculty_evaluation_feedback_report_report(
     ];
 
     return $report;
+}
+
+function faculty_evaluation_feedback_report_program_code(PDO $pdo, int $facultyId, array $faculty, array $subjects = []): string
+{
+    $programCode = program_chair_faculty_program_code($pdo, $facultyId);
+    if ($programCode !== '') {
+        return $programCode;
+    }
+
+    $facultyUser = individual_faculty_performance_faculty_user_management($pdo, $faculty);
+    if ($facultyUser !== null) {
+        $facultyUserRole = user_management_normalize_role((string) ($facultyUser['account_role'] ?? ''));
+        $facultyUserId = (int) ($facultyUser['user_management_id'] ?? 0);
+
+        if ($facultyUserRole === 'program_chair' && $facultyUserId > 0) {
+            $programCode = program_chair_user_program_code($pdo, $facultyUserId);
+            if ($programCode !== '') {
+                return $programCode;
+            }
+        }
+    }
+
+    $programCode = faculty_evaluation_feedback_report_evaluator_program_code($pdo, $facultyId);
+    if ($programCode !== '') {
+        return $programCode;
+    }
+
+    return faculty_evaluation_feedback_report_subject_program_code($subjects);
+}
+
+function faculty_evaluation_feedback_report_evaluator_program_code(PDO $pdo, int $facultyId): string
+{
+    $statement = $pdo->prepare(
+        "SELECT assignment.program_code
+         FROM tbl_program_chair_faculty_evaluations ev
+         INNER JOIN tbl_program_chair_user_programs assignment
+            ON assignment.program_chair_user_management_id = ev.program_chair_user_management_id
+           AND assignment.is_active = 1
+           AND assignment.program_code <> ''
+         WHERE ev.faculty_id = :faculty_id
+           AND ev.submission_status = 'submitted'
+         GROUP BY assignment.program_code
+         ORDER BY
+            COUNT(*) DESC,
+            MAX(COALESCE(ev.final_submitted_at, ev.updated_at, ev.completed_at, ev.created_at)) DESC
+         LIMIT 1"
+    );
+    $statement->execute(['faculty_id' => $facultyId]);
+
+    return program_chair_normalize_program_code((string) ($statement->fetchColumn() ?: ''), true);
+}
+
+function faculty_evaluation_feedback_report_subject_program_code(array $subjects): string
+{
+    $counts = [];
+    foreach ($subjects as $subject) {
+        if (!preg_match('/\((BSIT|BSIS|BSCS)\s+\d+[A-Z]?\)/i', (string) $subject, $matches)) {
+            continue;
+        }
+
+        $programCode = program_chair_normalize_program_code((string) $matches[1], true);
+        if ($programCode === '') {
+            continue;
+        }
+
+        $counts[$programCode] = ($counts[$programCode] ?? 0) + 1;
+    }
+
+    if ($counts === []) {
+        return '';
+    }
+
+    arsort($counts);
+
+    return (string) array_key_first($counts);
 }
 
 function faculty_evaluation_feedback_report_program_label(PDO $pdo, string $programCode): string
@@ -71,41 +146,6 @@ function faculty_evaluation_feedback_report_program_label(PDO $pdo, string $prog
 function faculty_evaluation_feedback_report_subjects(PDO $pdo, int $facultyId, ?array $termFilter = null): array
 {
     $subjects = [];
-
-    $enrollmentSql = "SELECT DISTINCT
-            TRIM(CONCAT(
-                COALESCE(subject_code, ''),
-                CASE
-                    WHEN TRIM(COALESCE(subject_code, '')) <> ''
-                     AND TRIM(COALESCE(descriptive_title, '')) <> ''
-                    THEN ' - '
-                    ELSE ''
-                END,
-                COALESCE(descriptive_title, ''),
-                CASE
-                    WHEN TRIM(COALESCE(section_text, '')) <> ''
-                    THEN CONCAT(' (', TRIM(section_text), ')')
-                    ELSE ''
-                END
-            )) AS subject_label
-         FROM tbl_student_management_enrolled_subjects
-         WHERE faculty_id = :faculty_id
-           AND is_active = 1";
-    $enrollmentParameters = ['faculty_id' => $facultyId];
-
-    if ($termFilter !== null) {
-        $enrollmentSql .= ' AND ay_id = :ay_id AND semester = :semester';
-        $enrollmentParameters['ay_id'] = (int) ($termFilter['ay_id'] ?? 0);
-        $enrollmentParameters['semester'] = (int) ($termFilter['semester'] ?? 0);
-    }
-
-    $enrollmentSql .= ' ORDER BY subject_label ASC';
-    $enrollmentStatement = $pdo->prepare($enrollmentSql);
-    $enrollmentStatement->execute($enrollmentParameters);
-
-    foreach ($enrollmentStatement->fetchAll(PDO::FETCH_COLUMN) as $subjectLabel) {
-        faculty_evaluation_feedback_report_add_subject($subjects, (string) $subjectLabel);
-    }
 
     $studentSql = "SELECT DISTINCT subject_summary
          FROM tbl_student_faculty_evaluations
@@ -171,36 +211,112 @@ function faculty_evaluation_feedback_report_subjects(PDO $pdo, int $facultyId, ?
         faculty_evaluation_feedback_report_add_subject($subjects, (string) $subjectLabel);
     }
 
+    if ($subjects === []) {
+        foreach (faculty_evaluation_feedback_report_active_subjects($pdo, $facultyId, $termFilter) as $subjectLabel) {
+            faculty_evaluation_feedback_report_add_subject($subjects, $subjectLabel);
+        }
+    }
+
     return array_values($subjects);
+}
+
+function faculty_evaluation_feedback_report_active_subjects(PDO $pdo, int $facultyId, ?array $termFilter = null): array
+{
+    $sql = "SELECT DISTINCT
+            TRIM(CONCAT(
+                COALESCE(subject_code, ''),
+                CASE
+                    WHEN TRIM(COALESCE(subject_code, '')) <> ''
+                     AND TRIM(COALESCE(descriptive_title, '')) <> ''
+                    THEN ' - '
+                    ELSE ''
+                END,
+                COALESCE(descriptive_title, ''),
+                CASE
+                    WHEN TRIM(COALESCE(section_text, '')) <> ''
+                    THEN CONCAT(' (', TRIM(section_text), ')')
+                    ELSE ''
+                END
+            )) AS subject_label
+         FROM tbl_student_management_enrolled_subjects
+         WHERE faculty_id = :faculty_id
+           AND is_active = 1";
+    $parameters = ['faculty_id' => $facultyId];
+
+    if ($termFilter !== null) {
+        $sql .= ' AND ay_id = :ay_id AND semester = :semester';
+        $parameters['ay_id'] = (int) ($termFilter['ay_id'] ?? 0);
+        $parameters['semester'] = (int) ($termFilter['semester'] ?? 0);
+    }
+
+    $sql .= ' ORDER BY subject_label ASC';
+    $statement = $pdo->prepare($sql);
+    $statement->execute($parameters);
+
+    return array_map('strval', $statement->fetchAll(PDO::FETCH_COLUMN));
 }
 
 function faculty_evaluation_feedback_report_add_subject(array &$subjects, string $subjectLabel): void
 {
-    $subjectLabel = trim(preg_replace('/\s+/', ' ', $subjectLabel) ?? '');
+    $subjectLabel = faculty_evaluation_feedback_report_normalize_subject_label($subjectLabel);
     if ($subjectLabel === '') {
         return;
+    }
+
+    $baseLabel = faculty_evaluation_feedback_report_subject_base_label($subjectLabel);
+    $hasSection = $baseLabel !== $subjectLabel;
+
+    foreach ($subjects as $key => $existingSubject) {
+        $existingBaseLabel = faculty_evaluation_feedback_report_subject_base_label((string) $existingSubject);
+        $existingHasSection = $existingBaseLabel !== (string) $existingSubject;
+
+        if (strcasecmp($existingBaseLabel, $baseLabel) !== 0) {
+            continue;
+        }
+
+        if (!$hasSection) {
+            return;
+        }
+
+        if (!$existingHasSection) {
+            unset($subjects[$key]);
+        }
     }
 
     $subjects[strtolower($subjectLabel)] = $subjectLabel;
 }
 
-function faculty_evaluation_feedback_report_limited_list(array $items, int $limit = 6): string
+function faculty_evaluation_feedback_report_normalize_subject_label(string $subjectLabel): string
+{
+    $subjectLabel = trim(preg_replace('/\s+/', ' ', $subjectLabel) ?? '');
+    if ($subjectLabel === '') {
+        return '';
+    }
+
+    $parts = array_map('trim', explode(' - ', $subjectLabel));
+    if (count($parts) >= 3 && strcasecmp((string) $parts[0], (string) $parts[1]) === 0) {
+        array_splice($parts, 1, 1);
+        $subjectLabel = implode(' - ', $parts);
+    }
+
+    return $subjectLabel;
+}
+
+function faculty_evaluation_feedback_report_subject_base_label(string $subjectLabel): string
+{
+    $subjectLabel = faculty_evaluation_feedback_report_normalize_subject_label($subjectLabel);
+
+    return trim((string) preg_replace('/\s*\([^)]*\)\s*$/', '', $subjectLabel));
+}
+
+function faculty_evaluation_feedback_report_limited_list(array $items): string
 {
     $items = array_values(array_filter(array_map('trim', $items)));
     if ($items === []) {
         return 'Not set';
     }
 
-    $limit = max(1, $limit);
-    $visibleItems = array_slice($items, 0, $limit);
-    $line = implode('; ', $visibleItems);
-    $remaining = count($items) - count($visibleItems);
-
-    if ($remaining > 0) {
-        $line .= '; and ' . format_number($remaining) . ' more';
-    }
-
-    return $line;
+    return implode("\n", $items);
 }
 
 function faculty_evaluation_feedback_report_term_line(array $report): string

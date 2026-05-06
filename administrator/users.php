@@ -14,7 +14,13 @@ $noticeMessage = flash('notice');
 $errorMessage = flash('error');
 $databaseError = null;
 $userManagementError = null;
+$accountAccessError = null;
 $userManagement = [];
+$accountAccessControls = account_access_control_default_rows();
+$accountAccessControlDescriptions = [
+    'students' => 'Blocks all student portal Google sign-ins while records and evaluations remain unchanged.',
+    'faculty' => 'Blocks Program Chair, Dean, and Campus Director sign-ins. Administrator access stays open.',
+];
 $managedUserStats = [
     'total' => 0,
     'active' => 0,
@@ -36,6 +42,7 @@ try {
     $pdo = db();
     ensure_user_management_table($pdo);
     ensure_role_evaluation_tables($pdo);
+    ensure_account_access_controls_table($pdo);
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!verify_csrf_token((string) ($_POST['csrf_token'] ?? ''))) {
@@ -43,6 +50,24 @@ try {
         }
 
         $action = (string) ($_POST['action'] ?? '');
+
+        if ($action === 'update_account_access_control') {
+            $controlKey = account_access_control_normalize_key((string) ($_POST['control_key'] ?? ''));
+            $isLocked = (string) ($_POST['is_locked'] ?? '0') === '1';
+
+            account_access_control_set(
+                $pdo,
+                $controlKey,
+                $isLocked,
+                (int) ($administrator['user_management_id'] ?? 0)
+            );
+
+            flash(
+                'notice',
+                account_access_control_label($controlKey) . ' are now ' . ($isLocked ? 'locked.' : 'unlocked.')
+            );
+            redirect_to('administrator/users.php#accountAccessControls');
+        }
 
         if ($action === 'save_user') {
             $userId = trim((string) ($_POST['user_management_id'] ?? ''));
@@ -99,16 +124,28 @@ try {
         throw new RuntimeException('The requested user management action is not supported.');
     }
 } catch (Throwable $exception) {
-    $userManagementError = is_local_env()
-        ? 'Unable to update user management. ' . $exception->getMessage()
+    $isAccountAccessAction = (string) ($_POST['action'] ?? '') === 'update_account_access_control';
+    $messagePrefix = $isAccountAccessAction
+        ? 'Unable to update account access controls. '
+        : 'Unable to update user management. ';
+    $message = is_local_env()
+        ? $messagePrefix . $exception->getMessage()
         : $exception->getMessage();
+
+    if ($isAccountAccessAction) {
+        $accountAccessError = $message;
+    } else {
+        $userManagementError = $message;
+    }
 }
 
 try {
     $pdo = db();
     ensure_user_management_table($pdo);
     ensure_role_evaluation_tables($pdo);
+    ensure_account_access_controls_table($pdo);
     $userManagement = user_management_list($pdo);
+    $accountAccessControls = account_access_controls($pdo);
     $assignmentTargetOptions = [
         'dean' => role_evaluation_assignment_target_options($pdo, 'dean'),
         'director' => role_evaluation_assignment_target_options($pdo, 'director'),
@@ -181,6 +218,55 @@ require __DIR__ . '/_start.php';
 <?php if ($errorMessage !== null): ?>
   <div class="alert alert-danger" role="alert"><?= h($errorMessage) ?></div>
 <?php endif; ?>
+
+<?php if ($accountAccessError !== null): ?>
+  <div class="alert alert-danger" role="alert"><?= h($accountAccessError) ?></div>
+<?php endif; ?>
+
+<div class="row g-4 mb-4" id="accountAccessControls">
+  <?php foreach (['students', 'faculty'] as $controlKey): ?>
+    <?php
+      $control = $accountAccessControls[$controlKey] ?? account_access_control_default_rows()[$controlKey];
+      $isLocked = (int) ($control['is_locked'] ?? 0) === 1;
+      $label = account_access_control_label($controlKey);
+      $nextLockedValue = $isLocked ? '0' : '1';
+      $actionLabel = ($isLocked ? 'Unlock ' : 'Lock ') . $label;
+      $confirmText = $actionLabel . '?';
+    ?>
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+            <div>
+              <h5 class="mb-1"><?= h($label) ?></h5>
+              <p class="text-muted mb-0"><?= h($accountAccessControlDescriptions[$controlKey] ?? '') ?></p>
+            </div>
+            <span class="badge <?= $isLocked ? 'bg-danger' : 'bg-label-success' ?>">
+              <?= $isLocked ? 'Locked' : 'Open' ?>
+            </span>
+          </div>
+
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <small class="text-muted">Last changed <?= h(format_datetime($control['updated_at'] ?? null)) ?></small>
+            <form
+              method="post"
+              action="<?= h(base_url('administrator/users.php')) ?>"
+              onsubmit="return confirm('<?= h($confirmText) ?>');"
+            >
+              <input type="hidden" name="csrf_token" value="<?= h(csrf_token()) ?>" />
+              <input type="hidden" name="action" value="update_account_access_control" />
+              <input type="hidden" name="control_key" value="<?= h($controlKey) ?>" />
+              <input type="hidden" name="is_locked" value="<?= h($nextLockedValue) ?>" />
+              <button type="submit" class="btn <?= $isLocked ? 'btn-success' : 'btn-outline-danger' ?>">
+                <?= h($actionLabel) ?>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  <?php endforeach; ?>
+</div>
 
 <div class="row g-4 mb-4">
   <div class="col-lg-5">

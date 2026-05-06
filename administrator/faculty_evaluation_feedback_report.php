@@ -239,7 +239,15 @@ require __DIR__ . '/_start.php';
             </div>
             <div class="fefr-field-line fefr-field-line-wide">
               <span>Subject(s) Handled:</span>
-              <strong><?= h((string) $feedback['subject_line']) ?></strong>
+              <strong>
+                <?php if (($feedback['subjects'] ?? []) === []): ?>
+                  <span class="fefr-subject-item">Not set</span>
+                <?php else: ?>
+                  <?php foreach (($feedback['subjects'] ?? []) as $subjectHandled): ?>
+                    <span class="fefr-subject-item"><?= h(strtoupper((string) $subjectHandled)) ?></span>
+                  <?php endforeach; ?>
+                <?php endif; ?>
+              </strong>
             </div>
           </div>
         </section>

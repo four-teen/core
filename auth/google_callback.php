@@ -56,13 +56,24 @@ try {
             redirect_to('auth/login.php');
         }
 
+        $managedUserRole = user_management_normalize_role((string) ($managedUser['account_role'] ?? 'program_chair'));
+        if ($managedUserRole !== 'administrator' && account_access_control_is_locked($pdo, 'faculty')) {
+            flash('error', 'Faculty accounts are temporarily locked by the administrator.');
+            redirect_to('auth/login.php');
+        }
+
         login_administrator($profile, $managedUser);
-        redirect_to(administrator_role_landing_path((string) ($managedUser['account_role'] ?? 'administrator')));
+        redirect_to(administrator_role_landing_path($managedUserRole));
     }
 
     $student = find_student_for_login($pdo, $email);
 
     if ($student !== null) {
+        if (account_access_control_is_locked($pdo, 'students')) {
+            flash('error', 'Student accounts are temporarily locked by the administrator.');
+            redirect_to('auth/login.php');
+        }
+
         login_student($student);
         redirect_to('student/index.php');
     }

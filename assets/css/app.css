@@ -1607,13 +1607,13 @@
 
 .fefr-letterhead {
   position: absolute;
-  top: 6.8mm;
-  right: 15mm;
+  top: 6mm;
+  right: 13mm;
   left: 22mm;
   z-index: 2;
   display: grid;
-  grid-template-columns: 20mm 18mm minmax(0, 1fr) 38mm;
-  align-items: center;
+  grid-template-columns: 20mm 18mm minmax(0, 1fr) 43mm;
+  align-items: start;
   gap: 1.8mm;
   min-height: 25mm;
   color: #111;
@@ -1660,16 +1660,16 @@
 }
 
 .fefr-letterhead-code {
-  align-self: end;
+  align-self: start;
   justify-self: end;
-  margin-bottom: 1mm;
+  margin-top: 4mm;
   min-width: 34mm;
-  padding: 1.2mm 1.5mm;
-  background: rgba(255, 255, 255, 0.94);
+  padding: 0.5mm 1mm;
+  background: transparent;
   color: #111;
   font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: 7.4pt;
-  line-height: 1.18;
+  font-size: 6.4pt;
+  line-height: 1.08;
 }
 
 .fefr-letterhead-code span {
@@ -1729,7 +1729,7 @@
   min-width: 0;
 }
 
-.fefr-field-line span {
+.fefr-field-line > span {
   flex: 0 0 34mm;
   color: #111;
   font-size: 9.4pt;
@@ -1751,7 +1751,26 @@
 }
 
 .fefr-field-line-wide strong {
-  font-size: 7.6pt;
+  font-size: 7.1pt;
+  line-height: 1.05;
+  white-space: normal;
+}
+
+.fefr-field-line-wide {
+  align-items: flex-start;
+}
+
+.fefr-field-line-wide > span {
+  padding-top: 0.2mm;
+}
+
+.fefr-subject-item {
+  display: block;
+  margin: 0;
+  padding: 0;
+  color: #111;
+  line-height: 1.05;
+  white-space: normal;
 }
 
 .fefr-report-table {

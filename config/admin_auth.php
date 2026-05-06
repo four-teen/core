@@ -60,6 +60,23 @@ function administrator_role_landing_path(string $role): string
     return 'administrator/index.php';
 }
 
+function enforce_faculty_account_access_lock(): void
+{
+    $role = administrator_profile_role();
+
+    if ($role === '' || $role === 'administrator') {
+        return;
+    }
+
+    if (!account_access_control_is_locked(db(), 'faculty')) {
+        return;
+    }
+
+    logout_administrator();
+    flash('error', 'Faculty accounts are temporarily locked by the administrator.');
+    redirect_to('auth/login.php');
+}
+
 function require_admin_authentication(): void
 {
     if (administrator_profile() === null) {
@@ -92,6 +109,8 @@ function require_program_chair_authentication(): void
         redirect_to('auth/login.php');
     }
 
+    enforce_faculty_account_access_lock();
+
     if (!is_program_chair_authenticated()) {
         flash('error', 'Your account is assigned to the ' . user_management_role_label(administrator_profile_role()) . ' module.');
         redirect_to(administrator_role_landing_path(administrator_profile_role()));
@@ -110,6 +129,8 @@ function require_role_evaluator_authentication(): void
         flash('error', 'Please sign in again so your account role can be verified.');
         redirect_to('auth/login.php');
     }
+
+    enforce_faculty_account_access_lock();
 
     if (!is_role_evaluator_authenticated()) {
         flash('error', 'Your account is assigned to the ' . user_management_role_label(administrator_profile_role()) . ' module.');

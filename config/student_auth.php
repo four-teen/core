@@ -18,6 +18,12 @@ function require_student_authentication(): void
         flash('error', 'Please sign in with Google to open the student portal.');
         redirect_to('auth/login.php');
     }
+
+    if (account_access_control_is_locked(db(), 'students')) {
+        logout_student();
+        flash('error', 'Student accounts are temporarily locked by the administrator.');
+        redirect_to('auth/login.php');
+    }
 }
 
 function login_student(array $student): void
