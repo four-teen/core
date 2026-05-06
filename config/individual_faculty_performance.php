@@ -618,111 +618,104 @@ function individual_faculty_performance_supervisor_rating_sources(PDO $pdo, int 
     $subjectIds = [];
     $averageRatings = [];
     $lastUpdated = '';
-    $programChairUserIds = [];
-
-    $directSql = "SELECT
-            ev.program_chair_evaluation_id,
-            ev.program_chair_user_management_id,
-            ev.subject_id,
-            ev.average_rating,
-            ev.updated_at,
-            ans.category_key,
-            ans.category_title,
-            ans.rating
-         FROM tbl_program_chair_faculty_evaluations ev
-         LEFT JOIN tbl_program_chair_faculty_evaluation_answers ans
-            ON ans.program_chair_evaluation_id = ev.program_chair_evaluation_id
-         WHERE ev.faculty_id = :faculty_id
-           AND ev.submission_status = 'submitted'";
-    $directParameters = ['faculty_id' => $facultyId];
-
-    if ($termFilter !== null) {
-        $directSql .= " AND EXISTS (
-            SELECT 1
-            FROM tbl_student_management_enrolled_subjects es
-            WHERE es.faculty_id = ev.faculty_id
-              AND es.subject_id = ev.subject_id
-              AND es.ay_id = :supervisor_ay_id
-              AND es.semester = :supervisor_semester
-              AND es.is_active = 1
-        )";
-        $directParameters['supervisor_ay_id'] = (int) ($termFilter['ay_id'] ?? 0);
-        $directParameters['supervisor_semester'] = (int) ($termFilter['semester'] ?? 0);
-    }
-
-    $directSql .= " ORDER BY ev.program_chair_evaluation_id ASC, ans.question_order ASC";
-
-    $directStatement = $pdo->prepare($directSql);
-    $directStatement->execute($directParameters);
-
-    foreach ($directStatement->fetchAll() as $row) {
-        $sourceKey = 'program_chair:' . (string) ((int) ($row['program_chair_evaluation_id'] ?? 0));
-        $sourceEvaluationIds[$sourceKey] = true;
-
-        $programChairUserId = (int) ($row['program_chair_user_management_id'] ?? 0);
-        if ($programChairUserId > 0) {
-            $programChairUserIds[$programChairUserId] = true;
-            $evaluatorIds['program_chair:' . (string) $programChairUserId] = true;
-        }
-
-        $subjectId = (int) ($row['subject_id'] ?? 0);
-        if ($subjectId > 0) {
-            $subjectIds[$subjectId] = true;
-        }
-
-        $averageRating = (float) ($row['average_rating'] ?? 0);
-        if ($averageRating > 0) {
-            $averageRatings[$sourceKey] = $averageRating;
-        }
-
-        $lastUpdated = individual_faculty_performance_latest_datetime($lastUpdated, (string) ($row['updated_at'] ?? ''));
-
-        $categoryKey = individual_faculty_performance_normalize_category_key((string) ($row['category_key'] ?? ''));
-        $rating = (int) ($row['rating'] ?? 0);
-        if ($categoryKey !== '' && $rating >= 1 && $rating <= 5) {
-            individual_faculty_performance_add_supervisor_category_rating(
-                $categoryTotals,
-                $categoryKey,
-                $rating,
-                individual_faculty_performance_category_title($categoryKey),
-                $sourceKey
-            );
-        }
-    }
 
     $facultyUser = individual_faculty_performance_faculty_user_management($pdo, $faculty);
     $facultyUserRole = $facultyUser !== null
         ? user_management_normalize_role((string) ($facultyUser['account_role'] ?? ''))
         : '';
     $facultyUserId = $facultyUser !== null ? (int) ($facultyUser['user_management_id'] ?? 0) : 0;
+    $usesRoleSupervisor = in_array($facultyUserRole, ['program_chair', 'dean', 'director'], true);
 
+    if (!$usesRoleSupervisor) {
+        $directSql = "SELECT
+                ev.program_chair_evaluation_id,
+                ev.program_chair_user_management_id,
+                ev.subject_id,
+                ev.average_rating,
+                ev.updated_at,
+                ans.category_key,
+                ans.category_title,
+                ans.rating
+             FROM tbl_program_chair_faculty_evaluations ev
+             LEFT JOIN tbl_program_chair_faculty_evaluation_answers ans
+                ON ans.program_chair_evaluation_id = ev.program_chair_evaluation_id
+             WHERE ev.faculty_id = :faculty_id
+               AND ev.submission_status = 'submitted'";
+        $directParameters = ['faculty_id' => $facultyId];
+
+        if ($termFilter !== null) {
+            $directSql .= " AND EXISTS (
+                SELECT 1
+                FROM tbl_student_management_enrolled_subjects es
+                WHERE es.faculty_id = ev.faculty_id
+                  AND es.subject_id = ev.subject_id
+                  AND es.ay_id = :supervisor_ay_id
+                  AND es.semester = :supervisor_semester
+                  AND es.is_active = 1
+            )";
+            $directParameters['supervisor_ay_id'] = (int) ($termFilter['ay_id'] ?? 0);
+            $directParameters['supervisor_semester'] = (int) ($termFilter['semester'] ?? 0);
+        }
+
+        $directSql .= " ORDER BY ev.program_chair_evaluation_id ASC, ans.question_order ASC";
+
+        $directStatement = $pdo->prepare($directSql);
+        $directStatement->execute($directParameters);
+
+        foreach ($directStatement->fetchAll() as $row) {
+            $sourceKey = 'program_chair:' . (string) ((int) ($row['program_chair_evaluation_id'] ?? 0));
+            $sourceEvaluationIds[$sourceKey] = true;
+
+            $programChairUserId = (int) ($row['program_chair_user_management_id'] ?? 0);
+            if ($programChairUserId > 0) {
+                $evaluatorIds['program_chair:' . (string) $programChairUserId] = true;
+            }
+
+            $subjectId = (int) ($row['subject_id'] ?? 0);
+            if ($subjectId > 0) {
+                $subjectIds[$subjectId] = true;
+            }
+
+            $averageRating = (float) ($row['average_rating'] ?? 0);
+            if ($averageRating > 0) {
+                $averageRatings[$sourceKey] = $averageRating;
+            }
+
+            $lastUpdated = individual_faculty_performance_latest_datetime($lastUpdated, (string) ($row['updated_at'] ?? ''));
+
+            $categoryKey = individual_faculty_performance_normalize_category_key((string) ($row['category_key'] ?? ''));
+            $rating = (int) ($row['rating'] ?? 0);
+            if ($categoryKey !== '' && $rating >= 1 && $rating <= 5) {
+                individual_faculty_performance_add_supervisor_category_rating(
+                    $categoryTotals,
+                    $categoryKey,
+                    $rating,
+                    individual_faculty_performance_category_title($categoryKey),
+                    $sourceKey
+                );
+            }
+        }
+    }
+
+    $programChairEvaluateeUserIds = [];
     if ($facultyUserRole === 'program_chair' && $facultyUserId > 0) {
-        $programChairUserIds[$facultyUserId] = true;
+        $programChairEvaluateeUserIds[$facultyUserId] = true;
     }
 
-    $deanUserIds = [];
+    $deanEvaluateeUserIds = [];
     if ($facultyUserRole === 'dean' && $facultyUserId > 0) {
-        $deanUserIds[$facultyUserId] = true;
-    }
-
-    foreach (individual_faculty_performance_dean_user_ids_for_program_chairs($pdo, array_keys($programChairUserIds)) as $deanUserId) {
-        $deanUserIds[$deanUserId] = true;
+        $deanEvaluateeUserIds[$facultyUserId] = true;
     }
 
     $roleEvaluationIds = [];
-    foreach (individual_faculty_performance_role_evaluation_ids_for_targets($pdo, 'dean', 'program_chair', array_keys($programChairUserIds)) as $row) {
+    foreach (individual_faculty_performance_role_evaluation_ids_for_targets($pdo, 'dean', 'program_chair', array_keys($programChairEvaluateeUserIds)) as $row) {
         $roleEvaluationId = (int) ($row['role_evaluation_id'] ?? 0);
         if ($roleEvaluationId > 0) {
             $roleEvaluationIds[$roleEvaluationId] = true;
         }
-
-        $deanUserId = (int) ($row['evaluator_user_management_id'] ?? 0);
-        if ($deanUserId > 0) {
-            $deanUserIds[$deanUserId] = true;
-        }
     }
 
-    foreach (individual_faculty_performance_role_evaluation_ids_for_targets($pdo, 'director', 'dean', array_keys($deanUserIds)) as $row) {
+    foreach (individual_faculty_performance_role_evaluation_ids_for_targets($pdo, 'director', 'dean', array_keys($deanEvaluateeUserIds)) as $row) {
         $roleEvaluationId = (int) ($row['role_evaluation_id'] ?? 0);
         if ($roleEvaluationId > 0) {
             $roleEvaluationIds[$roleEvaluationId] = true;
@@ -1136,51 +1129,12 @@ function individual_faculty_performance_comments(PDO $pdo, int $facultyId, ?arra
     );
     $studentStatement->execute($studentParameters);
 
-    $comments = [];
+    $studentComments = [];
     foreach ($studentStatement->fetchAll() as $row) {
         individual_faculty_performance_add_comment(
-            $comments,
+            $studentComments,
             'Student',
             (string) ($row['author_label'] ?? ''),
-            (string) ($row['context_label'] ?? ''),
-            (string) ($row['comment_text'] ?? ''),
-            (string) ($row['updated_at'] ?? '')
-        );
-    }
-
-    $programChairUserIds = [];
-    $deanUserIds = [];
-    $supervisorComments = [];
-    $supervisorStatement = $pdo->prepare(
-        "SELECT
-            ev.comment_text,
-            ev.subject_text AS context_label,
-            ev.updated_at,
-            ev.program_chair_user_management_id,
-            um.full_name AS evaluator_name,
-            um.email_address AS evaluator_email
-         FROM tbl_program_chair_faculty_evaluations ev
-         LEFT JOIN tbl_user_management um
-            ON um.user_management_id = ev.program_chair_user_management_id
-         WHERE ev.faculty_id = :faculty_id
-           AND ev.submission_status = 'submitted'
-         ORDER BY ev.updated_at DESC"
-    );
-    $supervisorStatement->execute(['faculty_id' => $facultyId]);
-
-    foreach ($supervisorStatement->fetchAll() as $row) {
-        $programChairUserId = (int) ($row['program_chair_user_management_id'] ?? 0);
-        if ($programChairUserId > 0) {
-            $programChairUserIds[$programChairUserId] = true;
-        }
-
-        individual_faculty_performance_add_comment(
-            $supervisorComments,
-            'Program Chair',
-            role_evaluation_user_display_name([
-                'full_name' => (string) ($row['evaluator_name'] ?? ''),
-                'email_address' => (string) ($row['evaluator_email'] ?? ''),
-            ]),
             (string) ($row['context_label'] ?? ''),
             (string) ($row['comment_text'] ?? ''),
             (string) ($row['updated_at'] ?? '')
@@ -1192,47 +1146,77 @@ function individual_faculty_performance_comments(PDO $pdo, int $facultyId, ?arra
         ? user_management_normalize_role((string) ($facultyUser['account_role'] ?? ''))
         : '';
     $facultyUserId = $facultyUser !== null ? (int) ($facultyUser['user_management_id'] ?? 0) : 0;
+    $usesRoleSupervisor = in_array($facultyUserRole, ['program_chair', 'dean', 'director'], true);
+
+    $programChairEvaluateeUserIds = [];
+    $deanEvaluateeUserIds = [];
+    $supervisorComments = [];
+    if (!$usesRoleSupervisor) {
+        $supervisorStatement = $pdo->prepare(
+            "SELECT
+                ev.comment_text,
+                ev.subject_text AS context_label,
+                ev.updated_at,
+                ev.program_chair_user_management_id,
+                um.full_name AS evaluator_name,
+                um.email_address AS evaluator_email
+             FROM tbl_program_chair_faculty_evaluations ev
+             LEFT JOIN tbl_user_management um
+                ON um.user_management_id = ev.program_chair_user_management_id
+             WHERE ev.faculty_id = :faculty_id
+               AND ev.submission_status = 'submitted'
+             ORDER BY ev.updated_at DESC"
+        );
+        $supervisorStatement->execute(['faculty_id' => $facultyId]);
+
+        foreach ($supervisorStatement->fetchAll() as $row) {
+            individual_faculty_performance_add_comment(
+                $supervisorComments,
+                'Program Chair',
+                role_evaluation_user_display_name([
+                    'full_name' => (string) ($row['evaluator_name'] ?? ''),
+                    'email_address' => (string) ($row['evaluator_email'] ?? ''),
+                ]),
+                (string) ($row['context_label'] ?? ''),
+                (string) ($row['comment_text'] ?? ''),
+                (string) ($row['updated_at'] ?? '')
+            );
+        }
+    }
 
     if ($facultyUserRole === 'program_chair' && $facultyUserId > 0) {
-        $programChairUserIds[$facultyUserId] = true;
+        $programChairEvaluateeUserIds[$facultyUserId] = true;
     }
 
     if ($facultyUserRole === 'dean' && $facultyUserId > 0) {
-        $deanUserIds[$facultyUserId] = true;
-    }
-
-    foreach (individual_faculty_performance_dean_user_ids_for_program_chairs($pdo, array_keys($programChairUserIds)) as $deanUserId) {
-        $deanUserIds[$deanUserId] = true;
+        $deanEvaluateeUserIds[$facultyUserId] = true;
     }
 
     $deanComments = individual_faculty_performance_role_evaluation_comments(
         $pdo,
         'dean',
         'program_chair',
-        array_keys($programChairUserIds),
-        'Dean',
-        $deanUserIds
+        array_keys($programChairEvaluateeUserIds),
+        'Dean'
     );
 
     $directorComments = individual_faculty_performance_role_evaluation_comments(
         $pdo,
         'director',
         'dean',
-        array_keys($deanUserIds),
+        array_keys($deanEvaluateeUserIds),
         'Campus Director'
     );
 
-    foreach (array_merge($supervisorComments, $deanComments, $directorComments) as $comment) {
-        $comments[] = $comment;
-    }
+    $evaluatorComments = array_merge($supervisorComments, $deanComments, $directorComments);
 
-    usort($comments, static function (array $left, array $right): int {
+    usort($evaluatorComments, static function (array $left, array $right): int {
         return strcmp((string) ($right['updated_at'] ?? ''), (string) ($left['updated_at'] ?? ''));
     });
 
-    $supervisorCommentCount = count($supervisorComments) + count($deanComments) + count($directorComments);
+    $studentLimit = max(0, max(1, $limit) - count($evaluatorComments));
 
-    return array_slice($comments, 0, max(max(1, $limit), $supervisorCommentCount));
+    return array_merge($evaluatorComments, array_slice($studentComments, 0, $studentLimit));
 }
 
 function individual_faculty_performance_add_comment(
