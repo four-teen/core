@@ -1561,17 +1561,33 @@ function program_chair_evaluation_summary(PDO $pdo, int $programChairUserId): ar
 {
     ensure_program_chair_tables($pdo);
 
+    $programChairProgramCode = program_chair_user_program_code($pdo, $programChairUserId);
+    if ($programChairProgramCode === '') {
+        return [
+            'eligible_faculty' => 0,
+            'submitted_evaluations' => 0,
+            'draft_evaluations' => 0,
+            'average_rating' => 0,
+        ];
+    }
+
     $eligibleCondition = "pcf.is_active = 1 AND f.status = 'active'";
+    $submittedEvaluationCondition = "submitted_pcf.is_active = 1 AND submitted_f.status = 'active'";
+    $draftEvaluationCondition = "draft_pcf.is_active = 1 AND draft_f.status = 'active'";
+    $averageEvaluationCondition = "average_pcf.is_active = 1 AND average_f.status = 'active'";
     $parameters = [
         'summary_user_id' => $programChairUserId,
         'draft_user_id' => $programChairUserId,
         'average_user_id' => $programChairUserId,
+        'eligible_program_code' => $programChairProgramCode,
+        'submitted_program_code' => $programChairProgramCode,
+        'draft_program_code' => $programChairProgramCode,
+        'average_program_code' => $programChairProgramCode,
     ];
-    $programChairProgramCode = program_chair_user_program_code($pdo, $programChairUserId);
-    if ($programChairProgramCode !== '') {
-        $eligibleCondition .= " AND pcf.faculty_program_code = :eligible_program_code";
-        $parameters['eligible_program_code'] = $programChairProgramCode;
-    }
+    $eligibleCondition .= " AND pcf.faculty_program_code = :eligible_program_code";
+    $submittedEvaluationCondition .= " AND submitted_pcf.faculty_program_code = :submitted_program_code";
+    $draftEvaluationCondition .= " AND draft_pcf.faculty_program_code = :draft_program_code";
+    $averageEvaluationCondition .= " AND average_pcf.faculty_program_code = :average_program_code";
 
     $statement = $pdo->prepare(
         "SELECT
@@ -1580,24 +1596,39 @@ function program_chair_evaluation_summary(PDO $pdo, int $programChairUserId): ar
              INNER JOIN tbl_faculty f ON f.faculty_id = pcf.faculty_id
              WHERE " . $eligibleCondition . ") AS eligible_faculty,
             (SELECT COUNT(*)
-             FROM tbl_program_chair_faculty_evaluations
-             WHERE program_chair_user_management_id = :summary_user_id
-               AND submission_status = 'submitted') AS submitted_evaluations,
+             FROM tbl_program_chair_faculty_evaluations submitted_ev
+             INNER JOIN tbl_program_chair_faculty submitted_pcf
+                ON submitted_pcf.faculty_id = submitted_ev.faculty_id
+             INNER JOIN tbl_faculty submitted_f
+                ON submitted_f.faculty_id = submitted_pcf.faculty_id
+             WHERE submitted_ev.program_chair_user_management_id = :summary_user_id
+               AND submitted_ev.submission_status = 'submitted'
+               AND " . $submittedEvaluationCondition . ") AS submitted_evaluations,
             (SELECT COUNT(*)
-             FROM tbl_program_chair_faculty_evaluations
-             WHERE program_chair_user_management_id = :draft_user_id
-               AND submission_status = 'draft'
+             FROM tbl_program_chair_faculty_evaluations draft_ev
+             INNER JOIN tbl_program_chair_faculty draft_pcf
+                ON draft_pcf.faculty_id = draft_ev.faculty_id
+             INNER JOIN tbl_faculty draft_f
+                ON draft_f.faculty_id = draft_pcf.faculty_id
+             WHERE draft_ev.program_chair_user_management_id = :draft_user_id
+               AND draft_ev.submission_status = 'draft'
+               AND " . $draftEvaluationCondition . "
                AND (
-                    question_count > 0
-                    OR TRIM(COALESCE(subject_text, '')) <> ''
-                    OR evaluation_date IS NOT NULL
-                    OR evaluation_time IS NOT NULL
-                    OR TRIM(COALESCE(comment_text, '')) <> ''
+                    draft_ev.question_count > 0
+                    OR TRIM(COALESCE(draft_ev.subject_text, '')) <> ''
+                    OR draft_ev.evaluation_date IS NOT NULL
+                    OR draft_ev.evaluation_time IS NOT NULL
+                    OR TRIM(COALESCE(draft_ev.comment_text, '')) <> ''
                )) AS draft_evaluations,
             (SELECT ROUND(AVG(NULLIF(average_rating, 0)), 2)
-             FROM tbl_program_chair_faculty_evaluations
-             WHERE program_chair_user_management_id = :average_user_id
-               AND submission_status = 'submitted') AS average_rating"
+             FROM tbl_program_chair_faculty_evaluations average_ev
+             INNER JOIN tbl_program_chair_faculty average_pcf
+                ON average_pcf.faculty_id = average_ev.faculty_id
+             INNER JOIN tbl_faculty average_f
+                ON average_f.faculty_id = average_pcf.faculty_id
+             WHERE average_ev.program_chair_user_management_id = :average_user_id
+               AND average_ev.submission_status = 'submitted'
+               AND " . $averageEvaluationCondition . ") AS average_rating"
     );
     $statement->execute($parameters);
 
@@ -1612,6 +1643,11 @@ function program_chair_evaluation_summary(PDO $pdo, int $programChairUserId): ar
 function program_chair_faculty_for_evaluation(PDO $pdo, int $programChairUserId, string $search = ''): array
 {
     ensure_program_chair_tables($pdo);
+
+    $programChairProgramCode = program_chair_user_program_code($pdo, $programChairUserId);
+    if ($programChairProgramCode === '') {
+        return [];
+    }
 
     $sql = "SELECT
             pcf.program_chair_faculty_id,
@@ -1652,12 +1688,11 @@ function program_chair_faculty_for_evaluation(PDO $pdo, int $programChairUserId,
          WHERE pcf.is_active = 1
            AND f.status = 'active'";
 
-    $parameters = ['program_chair_user_management_id' => $programChairUserId];
-    $programChairProgramCode = program_chair_user_program_code($pdo, $programChairUserId);
-    if ($programChairProgramCode !== '') {
-        $sql .= " AND pcf.faculty_program_code = :program_chair_program_code";
-        $parameters['program_chair_program_code'] = $programChairProgramCode;
-    }
+    $parameters = [
+        'program_chair_user_management_id' => $programChairUserId,
+        'program_chair_program_code' => $programChairProgramCode,
+    ];
+    $sql .= " AND pcf.faculty_program_code = :program_chair_program_code";
 
     $search = trim($search);
 
@@ -1707,11 +1742,19 @@ function program_chair_recent_evaluations(PDO $pdo, int $programChairUserId, int
     ensure_program_chair_tables($pdo);
     $limit = max(1, min(50, $limit));
 
-    $statement = $pdo->prepare(
-        "SELECT
+    $programChairProgramCode = program_chair_user_program_code($pdo, $programChairUserId);
+    if ($programChairProgramCode === '') {
+        return [];
+    }
+
+    $sql = "SELECT
             ev.program_chair_evaluation_id,
             ev.faculty_id,
-            ev.faculty_name,
+            f.last_name,
+            f.first_name,
+            f.middle_name,
+            f.ext_name,
+            pcf.faculty_program_code,
             ev.subject_id,
             ev.subject_code,
             ev.subject_text,
@@ -1722,6 +1765,12 @@ function program_chair_recent_evaluations(PDO $pdo, int $programChairUserId, int
             ev.final_submitted_at,
             ev.updated_at
          FROM tbl_program_chair_faculty_evaluations ev
+         INNER JOIN tbl_program_chair_faculty pcf
+            ON pcf.faculty_id = ev.faculty_id
+           AND pcf.is_active = 1
+         INNER JOIN tbl_faculty f
+            ON f.faculty_id = pcf.faculty_id
+           AND f.status = 'active'
          WHERE ev.program_chair_user_management_id = :program_chair_user_management_id
            AND (
                 ev.submission_status = 'submitted'
@@ -1730,18 +1779,35 @@ function program_chair_recent_evaluations(PDO $pdo, int $programChairUserId, int
                 OR ev.evaluation_date IS NOT NULL
                 OR ev.evaluation_time IS NOT NULL
                 OR TRIM(COALESCE(ev.comment_text, '')) <> ''
-           )
-         ORDER BY ev.updated_at DESC, ev.program_chair_evaluation_id DESC
-         LIMIT " . $limit
-    );
-    $statement->execute(['program_chair_user_management_id' => $programChairUserId]);
+           )";
+    $parameters = [
+        'program_chair_user_management_id' => $programChairUserId,
+        'program_chair_program_code' => $programChairProgramCode,
+    ];
+    $sql .= " AND pcf.faculty_program_code = :program_chair_program_code";
+    $sql .= " ORDER BY ev.updated_at DESC, ev.program_chair_evaluation_id DESC
+         LIMIT " . $limit;
 
-    return $statement->fetchAll();
+    $statement = $pdo->prepare($sql);
+    $statement->execute($parameters);
+
+    $rows = $statement->fetchAll();
+    foreach ($rows as $index => $row) {
+        $rows[$index]['faculty_name'] = program_chair_faculty_name_from_row($row);
+        $rows[$index]['faculty_program_code'] = program_chair_normalize_program_code((string) ($row['faculty_program_code'] ?? ''), true);
+    }
+
+    return $rows;
 }
 
 function program_chair_evaluation_context(PDO $pdo, int $facultyId, int $programChairUserId): ?array
 {
     ensure_program_chair_tables($pdo);
+
+    $programChairProgramCode = program_chair_user_program_code($pdo, $programChairUserId);
+    if ($programChairProgramCode === '') {
+        return null;
+    }
 
     $sql = "SELECT
             pcf.program_chair_faculty_id,
@@ -1757,12 +1823,11 @@ function program_chair_evaluation_context(PDO $pdo, int $facultyId, int $program
          WHERE pcf.is_active = 1
            AND f.status = 'active'
            AND pcf.faculty_id = :faculty_id";
-    $parameters = ['faculty_id' => $facultyId];
-    $programChairProgramCode = program_chair_user_program_code($pdo, $programChairUserId);
-    if ($programChairProgramCode !== '') {
-        $sql .= " AND pcf.faculty_program_code = :program_chair_program_code";
-        $parameters['program_chair_program_code'] = $programChairProgramCode;
-    }
+    $parameters = [
+        'faculty_id' => $facultyId,
+        'program_chair_program_code' => $programChairProgramCode,
+    ];
+    $sql .= " AND pcf.faculty_program_code = :program_chair_program_code";
     $sql .= " LIMIT 1";
 
     $statement = $pdo->prepare($sql);

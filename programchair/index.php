@@ -17,12 +17,16 @@ $facultyList = [];
 $recentEvaluations = [];
 $facultySearch = trim((string) ($_GET['faculty_search'] ?? ''));
 $pageError = null;
+$programAssignmentWarning = null;
 $noticeMessage = flash('notice');
 $errorMessage = flash('error');
 
 try {
     $pdo = db();
     ensure_program_chair_tables($pdo);
+    if (program_chair_user_program_code($pdo, $programChairUserId) === '') {
+        $programAssignmentWarning = 'No program is assigned to your Program Chair account yet. Ask the administrator to assign BSIT, BSIS, or BSCS from the Program Chair page.';
+    }
     $summary = program_chair_evaluation_summary($pdo, $programChairUserId);
     $facultyList = program_chair_faculty_for_evaluation($pdo, $programChairUserId, $facultySearch);
     $recentEvaluations = program_chair_recent_evaluations($pdo, $programChairUserId, 10);
@@ -174,6 +178,10 @@ require __DIR__ . '/_start.php';
 
 <?php if ($pageError !== null): ?>
   <div class="alert alert-danger" role="alert"><?= h($pageError) ?></div>
+<?php endif; ?>
+
+<?php if ($programAssignmentWarning !== null): ?>
+  <div class="alert alert-warning" role="alert"><?= h($programAssignmentWarning) ?></div>
 <?php endif; ?>
 
 <div class="row g-4 mb-4">
