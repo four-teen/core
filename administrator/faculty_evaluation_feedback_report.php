@@ -372,6 +372,18 @@ require __DIR__ . '/_start.php';
           </div>
         </section>
       </div>
+
+      <footer class="fefr-institutional-footer">
+        <p>
+          <strong>VISION:</strong> A leading University in advancing scholarly innovation, multi-cultural convergence, and responsive public service in a borderless Region.
+          <span>|</span>
+          <strong>MISSION:</strong> The University shall primarily provide advanced instruction and professional training in science and technology, agriculture, fisheries, education and other relevant fields of study. It shall also undertake research and extension services, and provide progressive leadership in its areas of specialization.
+          <span>|</span>
+          <strong>MAXIM:</strong> Generator of Solutions.
+          <span>|</span>
+          <strong>CORE VALUES:</strong> Patriotism, Respect, Integrity, Zeal, Excellence in Public Service.
+        </p>
+      </footer>
     </section>
   </div>
 <?php else: ?>

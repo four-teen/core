@@ -1586,7 +1586,7 @@
 }
 
 .fefr-paper {
-  --fefr-content-top: 43mm;
+  --fefr-content-top: 40.5mm;
   box-sizing: border-box;
   width: 210mm;
   min-height: 297mm;
@@ -1660,15 +1660,16 @@
 }
 
 .fefr-letterhead-code {
-  align-self: start;
-  justify-self: end;
-  margin-top: 4mm;
-  min-width: 34mm;
-  padding: 0.5mm 1mm;
-  background: transparent;
+  position: absolute;
+  top: 20.5mm;
+  right: 0.5mm;
+  width: 37mm;
+  margin: 0;
+  padding: 0.6mm 1mm;
+  background: rgba(255, 255, 255, 0.9);
   color: #111;
   font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: 6.4pt;
+  font-size: 6.1pt;
   line-height: 1.08;
 }
 
@@ -1679,16 +1680,16 @@
 .fefr-paper-content {
   position: relative;
   z-index: 1;
-  padding: var(--fefr-content-top) 17mm 14mm 25mm;
+  padding: var(--fefr-content-top) 17mm 42mm 25mm;
   color: #111;
-  font-size: 9.2pt;
-  line-height: 1.18;
+  font-size: 8.9pt;
+  line-height: 1.14;
 }
 
 .fefr-title {
-  margin: 0 0 7mm;
+  margin: 0 0 4.8mm;
   color: #111;
-  font-size: 12pt;
+  font-size: 11.6pt;
   font-weight: 700;
   line-height: 1.15;
   text-align: center;
@@ -1696,7 +1697,7 @@
 }
 
 .fefr-section {
-  margin: 0 0 4.1mm;
+  margin: 0 0 3mm;
   break-inside: avoid;
   page-break-inside: avoid;
 }
@@ -1705,9 +1706,9 @@
   display: flex;
   gap: 1.8mm;
   align-items: baseline;
-  margin: 0 0 2mm 7.5mm;
+  margin: 0 0 1.35mm 7.5mm;
   color: #111;
-  font-size: 10.3pt;
+  font-size: 9.8pt;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -1718,7 +1719,7 @@
 
 .fefr-field-grid {
   display: grid;
-  gap: 1.55mm;
+  gap: 0.95mm;
   margin-left: 7.5mm;
 }
 
@@ -1732,17 +1733,17 @@
 .fefr-field-line > span {
   flex: 0 0 34mm;
   color: #111;
-  font-size: 9.4pt;
+  font-size: 8.9pt;
 }
 
 .fefr-field-line strong {
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 4.1mm;
+  min-height: 3.5mm;
   padding: 0 1.2mm 0.35mm;
   border-bottom: 1px solid #111;
   color: #111;
-  font-size: 8.6pt;
+  font-size: 8.2pt;
   font-weight: 400;
   line-height: 1.15;
   overflow: hidden;
@@ -1751,8 +1752,8 @@
 }
 
 .fefr-field-line-wide strong {
-  font-size: 7.1pt;
-  line-height: 1.05;
+  font-size: 6.55pt;
+  line-height: 0.98;
   white-space: normal;
 }
 
@@ -1769,7 +1770,7 @@
   margin: 0;
   padding: 0;
   color: #111;
-  line-height: 1.05;
+  line-height: 0.98;
   white-space: normal;
 }
 
@@ -1796,15 +1797,15 @@
 .fefr-report-table th,
 .fefr-report-table td {
   border: 1px solid #111;
-  padding: 1.1mm 1.3mm;
+  padding: 0.75mm 1.1mm;
   color: #111;
-  font-size: 8.2pt;
-  line-height: 1.15;
+  font-size: 7.8pt;
+  line-height: 1.08;
   vertical-align: middle;
 }
 
 .fefr-report-table th {
-  height: 9.2mm;
+  height: 7.3mm;
   font-weight: 700;
   text-align: center;
 }
@@ -1814,7 +1815,7 @@
 }
 
 .fefr-report-table td:last-child {
-  font-size: 8pt;
+  font-size: 7.55pt;
 }
 
 .fefr-key-area-list {
@@ -1823,31 +1824,31 @@
 }
 
 .fefr-key-area-list li {
-  margin: 0 0 0.45mm;
+  margin: 0 0 0.15mm;
 }
 
 .fefr-response-section {
-  margin-bottom: 4.4mm;
+  margin-bottom: 3mm;
 }
 
 .fefr-response-lines {
-  min-height: 8.8mm;
+  min-height: 5.8mm;
   margin-left: 7.5mm;
-  padding: 0.6mm 1mm 0.8mm;
+  padding: 0.45mm 1mm 0.55mm;
   border-bottom: 1px solid #111;
   color: #111;
-  font-size: 8.7pt;
-  line-height: 1.22;
+  font-size: 8.2pt;
+  line-height: 1.14;
 }
 
 .fefr-recommendation-list {
   display: grid;
-  gap: 1.15mm;
+  gap: 0.7mm;
   margin: 0 0 0 14.8mm;
   padding: 0;
   color: #111;
-  font-size: 9pt;
-  line-height: 1.2;
+  font-size: 8.5pt;
+  line-height: 1.12;
   list-style: none;
 }
 
@@ -1859,9 +1860,9 @@
 
 .fefr-checkbox {
   position: relative;
-  flex: 0 0 3.25mm;
-  width: 3.25mm;
-  height: 3.25mm;
+  flex: 0 0 2.9mm;
+  width: 2.9mm;
+  height: 2.9mm;
   margin-top: 0.1mm;
   border: 1px solid #111;
   background: transparent;
@@ -1884,20 +1885,20 @@
 }
 
 .fefr-acknowledgement {
-  margin-top: 5.5mm;
+  margin-top: 3mm;
 }
 
 .fefr-acknowledgement p {
-  margin: 0 0 8mm 0;
+  margin: 0 0 4.2mm 0;
   color: #111;
-  font-size: 9.6pt;
-  line-height: 1.25;
+  font-size: 8.8pt;
+  line-height: 1.16;
   text-align: justify;
 }
 
 .fefr-signature-stack {
   display: grid;
-  gap: 3.1mm;
+  gap: 2mm;
 }
 
 .fefr-signature-row {
@@ -1906,7 +1907,7 @@
   align-items: end;
   gap: 1.6mm;
   color: #111;
-  font-size: 9.4pt;
+  font-size: 8.7pt;
   line-height: 1.1;
 }
 
@@ -1918,17 +1919,46 @@
 .fefr-date-line {
   display: block;
   min-width: 0;
-  min-height: 4mm;
+  min-height: 3.25mm;
   padding: 0 1mm 0.4mm;
   border-bottom: 1px solid #111;
   color: #111;
-  font-size: 8.4pt;
+  font-size: 8pt;
   font-weight: 700;
   line-height: 1.15;
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.fefr-institutional-footer {
+  position: absolute;
+  right: 12mm;
+  bottom: 20.5mm;
+  left: 33mm;
+  z-index: 2;
+  padding-top: 1.4mm;
+  border-top: 1px dashed #53b985;
+  color: #6f6f6f;
+  font-family: Arial, Helvetica, sans-serif;
+  text-align: center;
+}
+
+.fefr-institutional-footer p {
+  margin: 0;
+  font-size: 6.75pt;
+  font-weight: 400;
+  line-height: 1.16;
+}
+
+.fefr-institutional-footer strong {
+  font-weight: 700;
+}
+
+.fefr-institutional-footer span {
+  display: inline-block;
+  margin: 0 0.7mm;
 }
 
 @media (max-width: 1199.98px) {
@@ -2363,6 +2393,6 @@
   }
 
   .fefr-paper-content {
-    padding: var(--fefr-content-top) 17mm 14mm 25mm !important;
+    padding: var(--fefr-content-top) 17mm 42mm 25mm !important;
   }
 }
